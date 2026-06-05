@@ -1,0 +1,21 @@
+paper_id,filename,guessed_title,num_pages,extraction_status
+2024_ACM_MambaTrack_MOT,2024_ACM_MambaTrack_MOT.pdf,MambaTrack: A Simple Baseline for Multiple Object Tracking,10,ok
+2024_arXiv_Mamba_FETrack,2024_arXiv_Mamba_FETrack.pdf,Mamba-FETrack: Frame-Event Tracking via State,18,ok
+2024_ECCV_MambaIR,2024_ECCV_MambaIR.pdf,MambaIR: A Simple Baseline for Image,20,ok
+2025_AAAI_MambaLCT,2025_AAAI_MambaLCT.pdf,MambaLCT: Boosting Tracking via Long-term Context State Space Model,9,ok
+2025_AAAI_MCITrack,2025_AAAI_MCITrack.pdf,Exploring Enhanced Contextual Information for Video-Level Object Tracking,9,ok
+2025_AAAI_MM_Tracker,2025_AAAI_MM_Tracker.pdf,MM-Tracker: Motion Mamba for UAV-platform Multiple Object Tracking,9,ok
+2025_AAAI_TemTrack,2025_AAAI_TemTrack.pdf,Robust Tracking via Mamba-based Context-aware Token Learning,9,ok
+2025_ACM_MultiStateTracker,2025_ACM_MultiStateTracker.pdf,Multi-State Tracker: Enhancing Efficient Object Tracking via,10,ok
+2025_arXiv_HyMamba,2025_arXiv_HyMamba.pdf,IEEE TRANSACTIONS ON IMAGE PROCESSING,13,ok
+2025_CVPR_All_Day_MCMT,2025_CVPR_All_Day_MCMT.pdf,All-Day Multi-Camera Multi-Target Tracking,10,ok
+2025_CVPR_MambaIRv2,2025_CVPR_MambaIRv2.pdf,MambaIRv2: Attentive State Space Restoration,10,ok
+2025_CVPR_MambaVLT,2025_CVPR_MambaVLT.pdf,MambaVLT: Time-Evolving Multimodal State Space Model for,11,ok
+2025_CVPR_RGBE_MamTrack,2025_CVPR_RGBE_MamTrack.pdf,Exploring Historical Information for RGBE Visual Tracking with Mamba,10,ok
+2025_CVPRW_SportMamba,2025_CVPRW_SportMamba.pdf,SportMamba: Adaptive Non-Linear Multi-Object Tracking,11,ok
+2025_ICASSP_MambaMOT,2025_ICASSP_MambaMOT.pdf,MambaMOT: State-Space Model as Motion Predictor,5,ok
+2025_ICASSP_MambaTrack,2025_ICASSP_MambaTrack.pdf,MambaTrack: Exploiting Dual-Enhancement for,5,ok
+2025_IEEE_Transaction_MambaVT,2025_IEEE_Transaction_MambaVT.pdf,"IEEE TRANSACTIONS ON CIRCUITS AND SYSTEMS FOR VIDEO TECHNOLOGY, VOL. 35, NO. 9, SEPTEMBER 2025",12,ok
+2025_IROS_MambaNUT,2025_IROS_MambaNUT.pdf,MambaNUT: Nighttime UAV Tracking via Mamba-based Adaptive,8,ok
+2026_IEEE_Transaction_MambaEVT,2026_IEEE_Transaction_MambaEVT.pdf,"IEEE TRANSACTIONS ON CIRCUITS AND SYSTEMS FOR VIDEO TECHNOLOGY, VOL. 36, NO. 1, JANUARY 2026",14,ok
+2026_IEEE_Transaction_SMTrack,2026_IEEE_Transaction_SMTrack.pdf,"IEEE TRANSACTIONS ON IMAGE PROCESSING, VOL. 35, 2026",13,ok
