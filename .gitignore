@@ -22,3 +22,6 @@ samples/tracking_pairs/*
 # Generated outputs
 outputs/
 logs/
+
+# External downloaded repositories
+external/
