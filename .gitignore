@@ -9,3 +9,16 @@ papers/*.pdf
 
 outputs/
 logs/
+
+outputs/
+logs/
+
+# Local sample images for testing only
+samples/raw_images/*
+!samples/raw_images/.gitkeep
+samples/tracking_pairs/*
+!samples/tracking_pairs/.gitkeep
+
+# Generated outputs
+outputs/
+logs/
