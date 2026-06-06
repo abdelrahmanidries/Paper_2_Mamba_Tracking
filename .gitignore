@@ -6,3 +6,6 @@ Thumbs.db
 .ipynb_checkpoints/
 
 papers/*.pdf
+
+outputs/
+logs/

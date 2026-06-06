@@ -1,0 +1,50 @@
+{
+  "name": "minimal_rgb_tracking_degradation_protocol",
+  "default_seed": 123,
+  "enabled_degradations": [
+    "motion_blur",
+    "defocus_blur",
+    "gaussian_noise",
+    "sensor_noise",
+    "low_resolution",
+    "jpeg_compression",
+    "low_light",
+    "mixed"
+  ],
+  "degradation_probabilities": {
+    "motion_blur": 0.16,
+    "defocus_blur": 0.1,
+    "gaussian_noise": 0.16,
+    "sensor_noise": 0.1,
+    "low_resolution": 0.16,
+    "jpeg_compression": 0.16,
+    "low_light": 0.08,
+    "mixed": 0.08
+  },
+  "severity_probabilities": {
+    "mild": 0.4,
+    "medium": 0.4,
+    "severe": 0.2
+  },
+  "pair_mode_probabilities": {
+    "search_only": 0.4,
+    "template_only": 0.15,
+    "both_same": 0.2,
+    "both_different": 0.2,
+    "clean": 0.05
+  },
+  "mixed_degradation_rules": {
+    "mild": {
+      "min_count": 2,
+      "max_count": 2
+    },
+    "medium": {
+      "min_count": 2,
+      "max_count": 3
+    },
+    "severe": {
+      "min_count": 3,
+      "max_count": 3
+    }
+  }
+}
