@@ -25,3 +25,16 @@ logs/
 
 # External downloaded repositories
 external/
+
+# Local datasets for experiments
+datasets/tiny_sot/raw/*
+!datasets/tiny_sot/raw/.gitkeep
+
+datasets/tiny_sot/degraded/*
+!datasets/tiny_sot/degraded/.gitkeep
+
+datasets/tiny_sot/annotations/*
+!datasets/tiny_sot/annotations/.gitkeep
+
+datasets/tiny_sot/README_assets/*
+!datasets/tiny_sot/README_assets/.gitkeep
