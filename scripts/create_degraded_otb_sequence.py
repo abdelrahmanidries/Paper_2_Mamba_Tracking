@@ -1,9 +1,11 @@
-"""Create a one-sequence degraded OTB-style root.
+"""Create a full OTB-style root with one degraded target sequence.
 
-The output layout is intentionally minimal:
+The output root mirrors all clean OTB sequence entries with symlinks, then
+replaces the target sequence with generated frames:
 
     <output_root>/otb_<sequence>_<degradation>_<severity>/<sequence>/img
     <output_root>/otb_<sequence>_<degradation>_<severity>/<sequence>/groundtruth_rect.txt
+    <output_root>/otb_<sequence>_<degradation>_<severity>/<sequence>/metadata.jsonl
 
 Images keep their original names and dimensions, so OTB bounding boxes remain
 unchanged.
@@ -66,6 +68,37 @@ def link_or_copy(src: Path, dst: Path) -> str:
         return "copy"
 
 
+def remove_path(path: Path) -> None:
+    if path.is_symlink() or path.is_file():
+        path.unlink()
+    elif path.is_dir():
+        shutil.rmtree(path)
+
+
+def link_or_copy_sequence(src: Path, dst: Path) -> str:
+    if dst.exists() or dst.is_symlink():
+        remove_path(dst)
+    try:
+        dst.symlink_to(src.resolve(), target_is_directory=True)
+        return "symlink"
+    except OSError:
+        shutil.copytree(src, dst, symlinks=True)
+        return "copytree"
+
+
+def mirror_clean_otb_sequences(clean_otb_root: Path, output_root: Path, target_sequence: str) -> int:
+    output_root.mkdir(parents=True, exist_ok=True)
+    count = 0
+    for entry in sorted(clean_otb_root.iterdir()):
+        if entry.name == target_sequence:
+            continue
+        if not entry.is_dir():
+            continue
+        link_or_copy_sequence(entry, output_root / entry.name)
+        count += 1
+    return count
+
+
 def validate_args(args: argparse.Namespace) -> None:
     if args.degradation != "clean" and args.severity not in SEVERITIES:
         raise ValueError(
@@ -95,6 +128,10 @@ def main() -> int:
     output_root = args.output_root / output_name
     output_sequence_dir = output_root / args.sequence
     output_img_dir = output_sequence_dir / "img"
+
+    mirrored_count = mirror_clean_otb_sequences(args.clean_otb_root, output_root, args.sequence)
+    if output_sequence_dir.exists() or output_sequence_dir.is_symlink():
+        remove_path(output_sequence_dir)
     output_img_dir.mkdir(parents=True, exist_ok=True)
 
     output_gt_path = output_sequence_dir / "groundtruth_rect.txt"
@@ -106,7 +143,7 @@ def main() -> int:
     if not frames:
         raise FileNotFoundError(f"No image frames found in {clean_img_dir}")
 
-    metadata_path = output_root / "metadata.jsonl"
+    metadata_path = output_sequence_dir / "metadata.jsonl"
     processed = 0
     with metadata_path.open("w", encoding="utf-8", newline="\n") as metadata_file:
         for index, frame_path in enumerate(frames):
@@ -159,6 +196,7 @@ def main() -> int:
 
     gt_lines = count_nonempty_lines(output_gt_path)
     print(f"Output root: {output_root}")
+    print(f"Mirrored non-target sequences: {mirrored_count}")
     print(f"Processed frames: {processed}")
     print(f"Ground-truth lines: {gt_lines}")
     print(f"Degradation type: {args.degradation}")

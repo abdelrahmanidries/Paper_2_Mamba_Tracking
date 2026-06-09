@@ -15,6 +15,12 @@ from PIL import Image, ImageEnhance, ImageFilter
 
 
 SEVERITIES = ("mild", "medium", "severe")
+if hasattr(Image, "Resampling"):
+    BICUBIC = Image.Resampling.BICUBIC
+    BILINEAR = Image.Resampling.BILINEAR
+else:
+    BICUBIC = Image.BICUBIC
+    BILINEAR = Image.BILINEAR
 
 
 def _check_severity(severity: str) -> str:
@@ -177,8 +183,8 @@ def low_resolution(
     scales = {"mild": 0.75, "medium": 0.5, "severe": 0.25}
     scale = scales[severity]
     low_size = (max(1, int(round(width * scale))), max(1, int(round(height * scale))))
-    down = pil.resize(low_size, Image.Resampling.BICUBIC)
-    up = down.resize((width, height), Image.Resampling.BICUBIC)
+    down = pil.resize(low_size, BICUBIC)
+    up = down.resize((width, height), BICUBIC)
     params = {"scale": scale, "low_size": list(low_size)}
     return up.convert("RGB"), _metadata("low_resolution", severity, params, seed)
 

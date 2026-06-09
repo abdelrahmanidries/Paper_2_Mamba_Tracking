@@ -6,7 +6,7 @@ These scripts automate the manual OSTrack OTB sanity workflow already used for c
 
 ## Scripts
 
-- `scripts/create_degraded_otb_sequence.py` creates one OTB-style evaluation root for one sequence and one degradation. It copies `groundtruth_rect.txt`, preserves frame names and image sizes, and writes per-frame metadata to `metadata.jsonl`.
+- `scripts/create_degraded_otb_sequence.py` creates one complete OTB-style evaluation root for one sequence and one degradation. It symlinks every non-target clean OTB sequence into the generated root, replaces the target sequence with degraded frames, copies `groundtruth_rect.txt`, preserves frame names and image sizes, and writes per-frame metadata to `<sequence>/metadata.jsonl`.
 - `scripts/run_ostrack_otb_eval.py` temporarily points `external/OSTrack/data/otb` to the requested clean or degraded OTB root, runs OSTrack on one sequence, copies `Car1.txt` and `Car1_time.txt` into `outputs/ostrack_runs/...`, computes metrics with `scripts/evaluate_tracking_result.py`, appends one row to `experiments/baseline_results.csv`, and restores the OTB symlink in a `finally` block.
 
 ## Clean Car1
