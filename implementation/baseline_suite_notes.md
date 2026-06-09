@@ -32,7 +32,7 @@ python3 scripts/run_baseline_degradation_suite.py \
   --dry_run
 ```
 
-By default, existing rows in `experiments/baseline_results.csv` are skipped. Use `--no-skip_existing` only when intentionally regenerating and appending duplicate baseline rows.
+By default, existing rows in `experiments/baseline_results.csv` are skipped. Use `--no_skip_existing` only when intentionally regenerating and appending duplicate baseline rows.
 
 ## Real Suite
 
