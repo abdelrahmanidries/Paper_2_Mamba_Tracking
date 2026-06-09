@@ -23,29 +23,48 @@ def has_active_rgssb(model: torch.nn.Module) -> bool:
     return any(isinstance(module, RestorationGuidedSSB) for module in model.modules())
 
 
+def count_params(model: torch.nn.Module) -> int:
+    return sum(param.numel() for param in model.parameters())
+
+
 def main() -> int:
-    config_path = OSTRACK_ROOT / "experiments" / "ostrack" / "vitb_256_mae_ce_32x4_ep300.yaml"
-    update_config_from_file(str(config_path))
+    baseline_config_path = OSTRACK_ROOT / "experiments" / "ostrack" / "vitb_256_mae_ce_32x4_ep300.yaml"
+    debug_config_path = OSTRACK_ROOT / "experiments" / "ostrack" / "vitb_256_mae_ce_32x4_ep300_rgssb_debug.yaml"
+
+    update_config_from_file(str(baseline_config_path))
+    baseline_cfg = copy.deepcopy(cfg)
 
     has_config = hasattr(cfg.MODEL, "RGSSB")
     print(f"RGSSB config exists: {has_config}")
     if not has_config:
         raise RuntimeError("cfg.MODEL.RGSSB is missing")
-    print(f"RGSSB default ENABLE: {cfg.MODEL.RGSSB.ENABLE}")
+    print(f"Baseline config RGSSB ENABLE: {baseline_cfg.MODEL.RGSSB.ENABLE}")
 
-    disabled_cfg = copy.deepcopy(cfg)
+    update_config_from_file(str(debug_config_path))
+    debug_cfg = copy.deepcopy(cfg)
+    print(f"Debug config RGSSB ENABLE: {debug_cfg.MODEL.RGSSB.ENABLE}")
+    if not debug_cfg.MODEL.RGSSB.ENABLE:
+        raise RuntimeError("Debug config should enable RG-SSB")
+
+    disabled_cfg = copy.deepcopy(baseline_cfg)
     disabled_cfg.MODEL.RGSSB.ENABLE = False
     disabled_model = build_ostrack(disabled_cfg, training=False)
     print(f"Disabled model active RGSSB: {has_active_rgssb(disabled_model)}")
     if has_active_rgssb(disabled_model):
         raise RuntimeError("RG-SSB should not be active when disabled")
 
-    enabled_cfg = copy.deepcopy(cfg)
+    enabled_cfg = copy.deepcopy(debug_cfg)
     enabled_cfg.MODEL.RGSSB.ENABLE = True
     enabled_model = build_ostrack(enabled_cfg, training=False)
     print(f"Enabled model active RGSSB: {has_active_rgssb(enabled_model)}")
     if not has_active_rgssb(enabled_model):
         raise RuntimeError("RG-SSB should be active when enabled")
+
+    disabled_params = count_params(disabled_model)
+    enabled_params = count_params(enabled_model)
+    print(f"Disabled params: {disabled_params}")
+    print(f"Enabled params: {enabled_params}")
+    print(f"Parameter count difference: {enabled_params - disabled_params}")
 
     enabled_model.eval()
     batch = 1
