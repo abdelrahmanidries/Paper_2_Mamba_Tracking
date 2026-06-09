@@ -1,0 +1,251 @@
+diff --git a/lib/config/ostrack/config.py b/lib/config/ostrack/config.py
+index 28f45bd..f929f8c 100644
+--- a/lib/config/ostrack/config.py
++++ b/lib/config/ostrack/config.py
+@@ -34,6 +34,20 @@ cfg.MODEL.HEAD = edict()
+ cfg.MODEL.HEAD.TYPE = "CENTER"
+ cfg.MODEL.HEAD.NUM_CHANNELS = 256
+ 
++# MODEL.RGSSB
++# Minimal proof-of-concept Restoration-Guided State Space Block.
++# Disabled by default so original OSTrack behavior and strict checkpoint
++# loading remain unchanged.
++cfg.MODEL.RGSSB = edict()
++cfg.MODEL.RGSSB.ENABLE = False
++cfg.MODEL.RGSSB.DIM = 768
++cfg.MODEL.RGSSB.SPATIAL_SIZE = [16, 16]
++cfg.MODEL.RGSSB.LOCAL_KERNEL_SIZE = 3
++cfg.MODEL.RGSSB.CHANNEL_REDUCTION = 4
++cfg.MODEL.RGSSB.USE_LOCAL_BRANCH = True
++cfg.MODEL.RGSSB.USE_CHANNEL_ATTENTION = True
++cfg.MODEL.RGSSB.USE_STATE_BRANCH = True
++
+ # TRAIN
+ cfg.TRAIN = edict()
+ cfg.TRAIN.LR = 0.0001
+diff --git a/lib/models/ostrack/ostrack.py b/lib/models/ostrack/ostrack.py
+index 406d8e9..d115a2e 100644
+--- a/lib/models/ostrack/ostrack.py
++++ b/lib/models/ostrack/ostrack.py
+@@ -10,6 +10,7 @@ from torch import nn
+ from torch.nn.modules.transformer import _get_clones
+ 
+ from lib.models.layers.head import build_box_head
++from lib.models.layers.rgssb import RestorationGuidedSSB
+ from lib.models.ostrack.vit import vit_base_patch16_224
+ from lib.models.ostrack.vit_ce import vit_large_patch16_224_ce, vit_base_patch16_224_ce
+ from lib.utils.box_ops import box_xyxy_to_cxcywh
+@@ -18,7 +19,7 @@ from lib.utils.box_ops import box_xyxy_to_cxcywh
+ class OSTrack(nn.Module):
+     """ This is the base class for OSTrack """
+ 
+-    def __init__(self, transformer, box_head, aux_loss=False, head_type="CORNER"):
++    def __init__(self, transformer, box_head, aux_loss=False, head_type="CORNER", cfg=None):
+         """ Initializes the model.
+         Parameters:
+             transformer: torch module of the transformer architecture.
+@@ -27,6 +28,7 @@ class OSTrack(nn.Module):
+         super().__init__()
+         self.backbone = transformer
+         self.box_head = box_head
++        self.cfg = cfg
+ 
+         self.aux_loss = aux_loss
+         self.head_type = head_type
+@@ -37,6 +39,21 @@ class OSTrack(nn.Module):
+         if self.aux_loss:
+             self.box_head = _get_clones(self.box_head, 6)
+ 
++        self.use_rgssb = bool(getattr(getattr(cfg.MODEL, "RGSSB", None), "ENABLE", False)) if cfg is not None else False
++        self.rgssb = None
++        if self.use_rgssb:
++            rgssb_cfg = cfg.MODEL.RGSSB
++            spatial_size = tuple(rgssb_cfg.SPATIAL_SIZE)
++            self.rgssb = RestorationGuidedSSB(
++                dim=rgssb_cfg.DIM,
++                spatial_size=spatial_size,
++                local_kernel_size=rgssb_cfg.LOCAL_KERNEL_SIZE,
++                channel_reduction=rgssb_cfg.CHANNEL_REDUCTION,
++                use_local_branch=rgssb_cfg.USE_LOCAL_BRANCH,
++                use_channel_attention=rgssb_cfg.USE_CHANNEL_ATTENTION,
++                use_state_branch=rgssb_cfg.USE_STATE_BRANCH,
++            )
++
+     def forward(self, template: torch.Tensor,
+                 search: torch.Tensor,
+                 ce_template_mask=None,
+@@ -63,6 +80,8 @@ class OSTrack(nn.Module):
+         cat_feature: output embeddings of the backbone, it can be (HW1+HW2, B, C) or (HW2, B, C)
+         """
+         enc_opt = cat_feature[:, -self.feat_len_s:]  # encoder output for the search region (B, HW, C)
++        if self.rgssb is not None:
++            enc_opt = self.rgssb(enc_opt, search_len=self.feat_len_s, spatial_size=(self.feat_sz_s, self.feat_sz_s))
+         opt = (enc_opt.unsqueeze(-1)).permute((0, 3, 2, 1)).contiguous()
+         bs, Nq, C, HW = opt.size()
+         opt_feat = opt.view(-1, C, self.feat_sz_s, self.feat_sz_s)
+@@ -134,6 +153,7 @@ def build_ostrack(cfg, training=True):
+         box_head,
+         aux_loss=False,
+         head_type=cfg.MODEL.HEAD.TYPE,
++        cfg=cfg,
+     )
+ 
+     if 'OSTrack' in cfg.MODEL.PRETRAIN_FILE and training:
+diff --git a/lib/models/layers/rgssb.py b/lib/models/layers/rgssb.py
+new file mode 100644
+index 0000000..165c239
+--- /dev/null
++++ b/lib/models/layers/rgssb.py
+@@ -0,0 +1,152 @@
++"""Minimal Restoration-Guided State Space Block for OSTrack.
++
++This is the first proof-of-concept RG-SSB integration module. It preserves
++token shape and uses a lightweight dependency-free SSM-style proxy branch,
++not a full Mamba implementation.
++"""
++
++from __future__ import annotations
++
++from typing import Optional, Tuple
++
++import torch
++from torch import nn
++
++
++class RestorationGuidedSSB(nn.Module):
++    """Shape-preserving RG-SSB block for search tokens.
++
++    Expected first OSTrack use:
++        [B, 256, 768] -> [B, 256, 768]
++    """
++
++    def __init__(
++        self,
++        dim: int,
++        spatial_size: Optional[Tuple[int, int]] = None,
++        local_kernel_size: int = 3,
++        channel_reduction: int = 4,
++        use_local_branch: bool = True,
++        use_channel_attention: bool = True,
++        use_state_branch: bool = True,
++        dropout: float = 0.0,
++    ) -> None:
++        super().__init__()
++        if dim <= 0:
++            raise ValueError("dim must be a positive integer")
++        if local_kernel_size <= 0 or local_kernel_size % 2 == 0:
++            raise ValueError("local_kernel_size must be a positive odd integer")
++        if channel_reduction <= 0:
++            raise ValueError("channel_reduction must be a positive integer")
++
++        self.dim = int(dim)
++        self.spatial_size = spatial_size
++        self.use_local_branch = bool(use_local_branch)
++        self.use_channel_attention = bool(use_channel_attention)
++        self.use_state_branch = bool(use_state_branch)
++
++        self.norm = nn.LayerNorm(dim)
++
++        padding = local_kernel_size // 2
++        self.local_depthwise = nn.Conv2d(
++            dim,
++            dim,
++            kernel_size=local_kernel_size,
++            padding=padding,
++            groups=dim,
++        )
++        self.local_pointwise = nn.Conv2d(dim, dim, kernel_size=1)
++
++        hidden_dim = max(1, dim // channel_reduction)
++        self.channel_mlp = nn.Sequential(
++            nn.Linear(dim, hidden_dim),
++            nn.GELU(),
++            nn.Linear(hidden_dim, dim),
++            nn.Sigmoid(),
++        )
++
++        self.state_depthwise = nn.Conv1d(
++            dim,
++            dim,
++            kernel_size=3,
++            padding=1,
++            groups=dim,
++        )
++        self.state_gate = nn.Linear(dim, dim)
++
++        self.activation = nn.GELU()
++        self.out_proj = nn.Linear(dim, dim)
++        self.dropout = nn.Dropout(dropout)
++
++    def _resolve_spatial_size(
++        self,
++        token_count: int,
++        spatial_size: Optional[Tuple[int, int]],
++    ) -> Tuple[int, int]:
++        size = spatial_size if spatial_size is not None else self.spatial_size
++        if size is None:
++            raise ValueError("spatial_size is required when the local branch is enabled")
++
++        height, width = int(size[0]), int(size[1])
++        if height <= 0 or width <= 0:
++            raise ValueError("spatial_size values must be positive")
++        if height * width != token_count:
++            raise ValueError(
++                f"spatial_size {size} is incompatible with token count {token_count}; "
++                "expected H*W == N"
++            )
++        return height, width
++
++    def _local_branch(self, x: torch.Tensor, spatial_size: Optional[Tuple[int, int]]) -> torch.Tensor:
++        batch, token_count, channels = x.shape
++        height, width = self._resolve_spatial_size(token_count, spatial_size)
++        feature_map = x.transpose(1, 2).reshape(batch, channels, height, width)
++        feature_map = self.local_depthwise(feature_map)
++        feature_map = self.local_pointwise(feature_map)
++        feature_map = self.activation(feature_map)
++        return feature_map.flatten(2).transpose(1, 2)
++
++    def _channel_attention_branch(self, x: torch.Tensor) -> torch.Tensor:
++        weights = self.channel_mlp(x.mean(dim=1)).unsqueeze(1)
++        return x * weights
++
++    def _state_branch(self, x: torch.Tensor) -> torch.Tensor:
++        sequence_features = self.state_depthwise(x.transpose(1, 2)).transpose(1, 2)
++        gate = torch.sigmoid(self.state_gate(x))
++        return self.activation(sequence_features) * gate
++
++    def forward(
++        self,
++        x: torch.Tensor,
++        template_len: Optional[int] = None,
++        search_len: Optional[int] = None,
++        spatial_size: Optional[Tuple[int, int]] = None,
++    ) -> torch.Tensor:
++        if x.ndim != 3:
++            raise ValueError(f"Expected x with shape [B, N, C], got {tuple(x.shape)}")
++        if x.shape[-1] != self.dim:
++            raise ValueError(f"Expected token dim {self.dim}, got {x.shape[-1]}")
++        if search_len is not None and int(search_len) != x.shape[1]:
++            raise ValueError(f"search_len {search_len} does not match token count {x.shape[1]}")
++        if template_len is not None and int(template_len) < 0:
++            raise ValueError("template_len must be non-negative when provided")
++
++        residual = x
++        x_norm = self.norm(x)
++
++        branches = []
++        if self.use_local_branch:
++            branches.append(self._local_branch(x_norm, spatial_size))
++        if self.use_channel_attention:
++            branches.append(self._channel_attention_branch(x_norm))
++        if self.use_state_branch:
++            branches.append(self._state_branch(x_norm))
++
++        if branches:
++            fused = torch.stack(branches, dim=0).mean(dim=0)
++        else:
++            fused = x_norm
++
++        out = self.out_proj(fused)
++        out = self.dropout(out)
++        return residual + out
