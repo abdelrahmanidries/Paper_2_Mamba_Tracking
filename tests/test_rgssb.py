@@ -84,4 +84,4 @@ def test_cuda_if_available_otherwise_cpu() -> None:
     x = torch.randn(2, 64, 64, device=device)
     y = model(x)
     assert y.shape == x.shape
-    assert y.device == device
+    assert y.device == x.device
