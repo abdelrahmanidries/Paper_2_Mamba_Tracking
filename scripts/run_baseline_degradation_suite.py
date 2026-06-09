@@ -27,11 +27,18 @@ def parse_args() -> argparse.Namespace:
         help="Path to the suite JSON config.",
     )
     parser.add_argument("--dry_run", action="store_true", help="Print commands without executing them.")
+    parser.set_defaults(skip_existing=True)
     parser.add_argument(
         "--skip_existing",
-        action=argparse.BooleanOptionalAction,
-        default=True,
+        dest="skip_existing",
+        action="store_true",
         help="Skip runs already present in the results CSV. Default: true.",
+    )
+    parser.add_argument(
+        "--no_skip_existing",
+        dest="skip_existing",
+        action="store_false",
+        help="Do not skip runs already present in the results CSV.",
     )
     parser.add_argument("--max_runs", type=int, default=None, help="Optional maximum number of non-skipped runs.")
     return parser.parse_args()
