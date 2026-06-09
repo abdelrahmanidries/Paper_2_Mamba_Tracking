@@ -13,6 +13,45 @@ These scripts automate the manual OSTrack OTB sanity workflow already used for c
 
 Result backup directories include both tracker and config names. This avoids collisions between the original OSTrack baseline config and debug configs such as `vitb_256_mae_ce_32x4_ep300_rgssb_debug`, which can otherwise share the same sequence/degradation/severity/seed labels.
 
+## CSV Duplicate Protection
+
+Each result row is uniquely identified by:
+
+```text
+tracker, config, sequence, degradation, severity, seed
+```
+
+`scripts/run_ostrack_otb_eval.py` skips an existing row by default before launching OSTrack. This prevents accidental duplicate rows and avoids unnecessary GPU runs.
+
+Explicit skip:
+
+```bash
+python3 scripts/run_ostrack_otb_eval.py \
+  --clean_otb_root /media/abdel/4484139E5D690B76/otb \
+  --eval_otb_root /media/abdel/4484139E5D690B76/otb \
+  --sequence Car1 \
+  --degradation clean \
+  --severity none \
+  --seed 0 \
+  --skip_existing
+```
+
+Overwrite an existing row after rerunning the evaluation:
+
+```bash
+python3 scripts/run_ostrack_otb_eval.py \
+  --clean_otb_root /media/abdel/4484139E5D690B76/otb \
+  --eval_otb_root /media/abdel/4484139E5D690B76/otb \
+  --sequence Car1 \
+  --config vitb_256_mae_ce_32x4_ep300_rgssb_debug \
+  --degradation clean \
+  --severity none \
+  --seed 0 \
+  --overwrite_existing
+```
+
+If a matching row exists, the script will either skip it or replace it. It will not append a duplicate matching row.
+
 ## Clean Car1
 
 ```bash

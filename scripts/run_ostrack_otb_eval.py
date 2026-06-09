@@ -51,6 +51,29 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", default=0, type=int)
     parser.add_argument("--output_dir", default="outputs/ostrack_runs", type=Path)
     parser.add_argument("--results_csv", default="experiments/baseline_results.csv", type=Path)
+    parser.set_defaults(skip_existing=True, skip_existing_requested=False)
+    parser.add_argument(
+        "--skip_existing",
+        dest="skip_existing",
+        action="store_true",
+        help="Skip if this tracker/config/sequence/degradation/severity/seed row already exists. Default: true.",
+    )
+    parser.add_argument(
+        "--no_skip_existing",
+        dest="skip_existing",
+        action="store_false",
+        help="Do not skip existing rows unless --overwrite_existing is used.",
+    )
+    parser.add_argument(
+        "--skip_existing_requested",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        "--overwrite_existing",
+        action="store_true",
+        help="Run evaluation and replace the matching CSV row instead of appending a duplicate.",
+    )
     parser.add_argument(
         "--conda_env",
         default="ostrack",
@@ -156,8 +179,124 @@ def append_result_row(csv_path: Path, row: dict[str, object]) -> None:
         writer.writerow(row)
 
 
+def experiment_key_from_values(
+    tracker: str,
+    config: str,
+    sequence: str,
+    degradation: str,
+    severity: str,
+    seed: int | str,
+) -> tuple[str, str, str, str, str, str]:
+    return (
+        str(tracker),
+        str(config),
+        str(sequence),
+        str(degradation),
+        str(severity),
+        str(seed),
+    )
+
+
+def experiment_key_from_row(row: dict[str, object]) -> tuple[str, str, str, str, str, str]:
+    return experiment_key_from_values(
+        str(row.get("tracker", "")),
+        str(row.get("config", "")),
+        str(row.get("sequence", "")),
+        str(row.get("degradation", "")),
+        str(row.get("severity", "")),
+        str(row.get("seed", "")),
+    )
+
+
+def read_result_rows(csv_path: Path) -> tuple[list[dict[str, str]], list[str]]:
+    if not csv_path.exists() or csv_path.stat().st_size == 0:
+        return [], list(CSV_COLUMNS)
+
+    with csv_path.open("r", encoding="utf-8", newline="") as csv_file:
+        reader = csv.DictReader(csv_file)
+        fieldnames = reader.fieldnames or list(CSV_COLUMNS)
+        return list(reader), fieldnames
+
+
+def find_existing_rows(csv_path: Path, key: tuple[str, str, str, str, str, str]) -> list[dict[str, str]]:
+    rows, _ = read_result_rows(csv_path)
+    return [row for row in rows if experiment_key_from_row(row) == key]
+
+
+def print_existing_row(row: dict[str, str]) -> None:
+    print("Existing result row:")
+    for column in CSV_COLUMNS:
+        print(f"  {column}: {row.get(column, '')}")
+
+
+def write_result_rows(csv_path: Path, rows: list[dict[str, object]], fieldnames: list[str]) -> None:
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
+    for column in CSV_COLUMNS:
+        if column not in fieldnames:
+            fieldnames.append(column)
+    with csv_path.open("w", encoding="utf-8", newline="") as csv_file:
+        writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def upsert_result_row(
+    csv_path: Path,
+    row: dict[str, object],
+    key: tuple[str, str, str, str, str, str],
+    overwrite: bool,
+) -> str:
+    if not overwrite:
+        append_result_row(csv_path, row)
+        return "appended"
+
+    rows, fieldnames = read_result_rows(csv_path)
+    output_rows: list[dict[str, object]] = []
+    replaced = False
+    for existing_row in rows:
+        if experiment_key_from_row(existing_row) == key:
+            if not replaced:
+                output_rows.append(row)
+                replaced = True
+            continue
+        output_rows.append(existing_row)
+    if not replaced:
+        output_rows.append(row)
+
+    write_result_rows(csv_path, output_rows, fieldnames)
+    return "replaced" if replaced else "appended"
+
+
 def main() -> int:
     args = parse_args()
+    if "--skip_existing" in sys.argv:
+        args.skip_existing_requested = True
+    if args.skip_existing_requested and args.overwrite_existing:
+        raise ValueError("--skip_existing and --overwrite_existing cannot be used together")
+    if args.overwrite_existing:
+        args.skip_existing = False
+
+    experiment_key = experiment_key_from_values(
+        args.tracker,
+        args.config,
+        args.sequence,
+        args.degradation,
+        args.severity,
+        args.seed,
+    )
+    existing_rows = find_existing_rows(args.results_csv, experiment_key)
+    if args.skip_existing and existing_rows:
+        print("Skipping existing experiment:")
+        print_existing_row(existing_rows[0])
+        if len(existing_rows) > 1:
+            print(f"Warning: found {len(existing_rows)} matching rows; no run was performed.")
+        return 0
+    if existing_rows and not args.overwrite_existing:
+        raise ValueError(
+            "Matching result row already exists. Use --skip_existing to skip or "
+            "--overwrite_existing to replace it."
+        )
+
     ostrack_root, clean_otb_root, eval_otb_root = validate_inputs(args)
 
     otb_link = ostrack_root / "data" / "otb"
@@ -220,7 +359,12 @@ def main() -> int:
             "eval_otb_root": str(eval_otb_root),
             "notes": "single-sequence baseline automation",
         }
-        append_result_row(args.results_csv, row)
+        write_action = upsert_result_row(
+            args.results_csv,
+            row,
+            experiment_key,
+            overwrite=args.overwrite_existing,
+        )
 
         print(f"Frames: {metrics['frames']}")
         print(f"Mean IoU: {metrics['mean_iou']:.4f}")
@@ -229,6 +373,7 @@ def main() -> int:
         print(f"Mean center error: {metrics['mean_center_error']:.2f} px")
         print(f"Output directory: {run_dir}")
         print(f"Results CSV: {args.results_csv}")
+        print(f"CSV action: {write_action}")
         return 0
     finally:
         restored_to = restore_otb_symlink(otb_link, previous_target, clean_otb_root)

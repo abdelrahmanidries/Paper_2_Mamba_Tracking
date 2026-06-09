@@ -132,8 +132,14 @@ def build_create_command(config: dict[str, Any], sequence: str, run: dict[str, A
     ]
 
 
-def build_eval_command(config: dict[str, Any], sequence: str, run: dict[str, Any], eval_otb_root: Path | str) -> list[str]:
-    return [
+def build_eval_command(
+    config: dict[str, Any],
+    sequence: str,
+    run: dict[str, Any],
+    eval_otb_root: Path | str,
+    overwrite_existing: bool = False,
+) -> list[str]:
+    command = [
         PROJECT_PYTHON,
         "scripts/run_ostrack_otb_eval.py",
         "--ostrack_root",
@@ -157,6 +163,9 @@ def build_eval_command(config: dict[str, Any], sequence: str, run: dict[str, Any
         "--results_csv",
         str(config["results_csv"]),
     ]
+    if overwrite_existing:
+        command.append("--overwrite_existing")
+    return command
 
 
 def command_text(command: list[str]) -> str:
@@ -268,7 +277,13 @@ def main() -> int:
                     execute_command(create_command, args.dry_run)
 
                 stage = "run_ostrack_otb_eval"
-                eval_command = build_eval_command(config, sequence, run, eval_root)
+                eval_command = build_eval_command(
+                    config,
+                    sequence,
+                    run,
+                    eval_root,
+                    overwrite_existing=not args.skip_existing,
+                )
                 commands.append(eval_command)
                 execute_command(eval_command, args.dry_run)
 
