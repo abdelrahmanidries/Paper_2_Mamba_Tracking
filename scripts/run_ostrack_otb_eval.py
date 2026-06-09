@@ -188,6 +188,8 @@ def main() -> int:
 
         run_dir = (
             args.output_dir
+            / args.tracker
+            / args.config
             / args.sequence
             / f"{args.degradation}_{args.severity}_seed{args.seed}"
         )
