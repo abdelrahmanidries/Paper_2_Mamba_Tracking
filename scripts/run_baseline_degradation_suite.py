@@ -51,7 +51,6 @@ def load_suite_config(path: Path) -> dict[str, Any]:
     required = {
         "clean_otb_root",
         "output_root",
-        "sequence",
         "tracker",
         "config",
         "ostrack_root",
@@ -61,9 +60,20 @@ def load_suite_config(path: Path) -> dict[str, Any]:
     missing = sorted(required - set(config))
     if missing:
         raise ValueError(f"Suite config missing required fields: {missing}")
+    if "sequence" not in config and "sequences" not in config:
+        raise ValueError("Suite config must include either 'sequence' or 'sequences'")
     if not isinstance(config["runs"], list) or not config["runs"]:
         raise ValueError("Suite config field 'runs' must be a non-empty list")
     return config
+
+
+def get_sequences(config: dict[str, Any]) -> list[str]:
+    if "sequences" in config:
+        sequences = config["sequences"]
+        if not isinstance(sequences, list) or not sequences:
+            raise ValueError("Suite config field 'sequences' must be a non-empty list")
+        return [str(sequence) for sequence in sequences]
+    return [str(config["sequence"])]
 
 
 def run_key(
@@ -98,19 +108,19 @@ def load_existing_results(csv_path: Path) -> set[tuple[str, str, str, str, str, 
     return existing
 
 
-def degraded_root(config: dict[str, Any], run: dict[str, Any]) -> Path:
+def degraded_root(config: dict[str, Any], sequence: str, run: dict[str, Any]) -> Path:
     output_root = Path(config["output_root"])
-    return output_root / f"otb_{config['sequence']}_{run['degradation']}_{run['severity']}"
+    return output_root / f"otb_{sequence}_{run['degradation']}_{run['severity']}"
 
 
-def build_create_command(config: dict[str, Any], run: dict[str, Any]) -> list[str]:
+def build_create_command(config: dict[str, Any], sequence: str, run: dict[str, Any]) -> list[str]:
     return [
         PROJECT_PYTHON,
         "scripts/create_degraded_otb_sequence.py",
         "--clean_otb_root",
         str(config["clean_otb_root"]),
         "--sequence",
-        str(config["sequence"]),
+        str(sequence),
         "--degradation",
         str(run["degradation"]),
         "--severity",
@@ -122,7 +132,7 @@ def build_create_command(config: dict[str, Any], run: dict[str, Any]) -> list[st
     ]
 
 
-def build_eval_command(config: dict[str, Any], run: dict[str, Any], eval_otb_root: Path | str) -> list[str]:
+def build_eval_command(config: dict[str, Any], sequence: str, run: dict[str, Any], eval_otb_root: Path | str) -> list[str]:
     return [
         PROJECT_PYTHON,
         "scripts/run_ostrack_otb_eval.py",
@@ -133,7 +143,7 @@ def build_eval_command(config: dict[str, Any], run: dict[str, Any], eval_otb_roo
         "--eval_otb_root",
         str(eval_otb_root),
         "--sequence",
-        str(config["sequence"]),
+        str(sequence),
         "--config",
         str(config["config"]),
         "--tracker",
@@ -180,7 +190,7 @@ def print_summary(rows: list[dict[str, str]]) -> None:
         print("No runs in summary.")
         return
 
-    columns = ["degradation", "severity", "seed", "status", "details"]
+    columns = ["sequence", "degradation", "severity", "seed", "status", "details"]
     widths = {
         column: max(len(column), *(len(str(row.get(column, ""))) for row in rows))
         for column in columns
@@ -215,59 +225,63 @@ def main() -> int:
 
     summary: list[dict[str, str]] = []
     attempted = 0
+    sequences = get_sequences(config)
 
-    for index, run in enumerate(config["runs"], start=1):
-        validate_run(run, index)
-        key = run_key(
-            config["tracker"],
-            config["config"],
-            config["sequence"],
-            run["degradation"],
-            run["severity"],
-            run["seed"],
-        )
+    for sequence in sequences:
+        for index, run in enumerate(config["runs"], start=1):
+            validate_run(run, index)
+            key = run_key(
+                config["tracker"],
+                config["config"],
+                sequence,
+                run["degradation"],
+                run["severity"],
+                run["seed"],
+            )
 
-        row_base = {
-            "degradation": str(run["degradation"]),
-            "severity": str(run["severity"]),
-            "seed": str(run["seed"]),
-        }
+            row_base = {
+                "sequence": str(sequence),
+                "degradation": str(run["degradation"]),
+                "severity": str(run["severity"]),
+                "seed": str(run["seed"]),
+            }
 
-        if args.skip_existing and key in existing:
-            summary.append({**row_base, "status": "skipped", "details": "already in results CSV"})
-            continue
-        if args.max_runs is not None and attempted >= args.max_runs:
-            summary.append({**row_base, "status": "skipped", "details": "max_runs reached"})
-            continue
+            if args.skip_existing and key in existing:
+                summary.append({**row_base, "status": "skipped", "details": "already in results CSV"})
+                continue
+            if args.max_runs is not None and attempted >= args.max_runs:
+                summary.append({**row_base, "status": "skipped", "details": "max_runs reached"})
+                continue
 
-        attempted += 1
-        commands: list[list[str]] = []
-        stage = "eval"
-        try:
-            if run["degradation"] == "clean":
-                eval_root: Path | str = config["clean_otb_root"]
-            else:
-                stage = "create_degraded_otb_sequence"
-                eval_root = degraded_root(config, run)
-                create_command = build_create_command(config, run)
-                commands.append(create_command)
-                execute_command(create_command, args.dry_run)
+            attempted += 1
+            commands: list[list[str]] = []
+            stage = "eval"
+            run_record = {**run, "sequence": sequence}
+            try:
+                if run["degradation"] == "clean":
+                    eval_root: Path | str = config["clean_otb_root"]
+                else:
+                    stage = "create_degraded_otb_sequence"
+                    eval_root = degraded_root(config, sequence, run)
+                    create_command = build_create_command(config, sequence, run)
+                    commands.append(create_command)
+                    execute_command(create_command, args.dry_run)
 
-            stage = "run_ostrack_otb_eval"
-            eval_command = build_eval_command(config, run, eval_root)
-            commands.append(eval_command)
-            execute_command(eval_command, args.dry_run)
+                stage = "run_ostrack_otb_eval"
+                eval_command = build_eval_command(config, sequence, run, eval_root)
+                commands.append(eval_command)
+                execute_command(eval_command, args.dry_run)
 
-            status = "planned" if args.dry_run else "completed"
-            details = "commands printed" if args.dry_run else "metrics appended by eval script"
-            summary.append({**row_base, "status": status, "details": details})
-            existing.add(key)
-        except subprocess.CalledProcessError as error:
-            append_failure(FAILURE_LOG, suite_config_path, run, stage, error, commands)
-            summary.append({**row_base, "status": "failed", "details": f"{stage}: exit {error.returncode}"})
-        except Exception as error:
-            append_failure(FAILURE_LOG, suite_config_path, run, stage, error, commands)
-            summary.append({**row_base, "status": "failed", "details": f"{stage}: {error}"})
+                status = "planned" if args.dry_run else "completed"
+                details = "commands printed" if args.dry_run else "metrics appended by eval script"
+                summary.append({**row_base, "status": status, "details": details})
+                existing.add(key)
+            except subprocess.CalledProcessError as error:
+                append_failure(FAILURE_LOG, suite_config_path, run_record, stage, error, commands)
+                summary.append({**row_base, "status": "failed", "details": f"{stage}: exit {error.returncode}"})
+            except Exception as error:
+                append_failure(FAILURE_LOG, suite_config_path, run_record, stage, error, commands)
+                summary.append({**row_base, "status": "failed", "details": f"{stage}: {error}"})
 
     print_summary(summary)
     if not args.dry_run:
