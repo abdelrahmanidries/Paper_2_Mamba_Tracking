@@ -235,96 +235,6 @@ index 3accc9e..6a67309 100644
              # Apply transforms
              data[s + '_images'], data[s + '_anno'], data[s + '_att'], data[s + '_masks'] = self.transform[s](
                  image=crops, bbox=boxes, att=att_mask, mask=mask_crops, joint=False)
-diff --git a/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_debug.yaml b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_debug.yaml
-new file mode 100644
-index 0000000..93c9f2a
---- /dev/null
-+++ b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_debug.yaml
-@@ -0,0 +1,84 @@
-+# Debug-only RG-SSB training config.
-+# This is intentionally tiny and should not be used as a final training recipe.
-+DATA:
-+  MAX_SAMPLE_INTERVAL: 200
-+  MEAN:
-+  - 0.485
-+  - 0.456
-+  - 0.406
-+  SEARCH:
-+    CENTER_JITTER: 3
-+    FACTOR: 4.0
-+    SCALE_JITTER: 0.25
-+    SIZE: 256
-+    NUMBER: 1
-+  STD:
-+  - 0.229
-+  - 0.224
-+  - 0.225
-+  TEMPLATE:
-+    CENTER_JITTER: 0
-+    FACTOR: 2.0
-+    SCALE_JITTER: 0
-+    SIZE: 128
-+  TRAIN:
-+    DATASETS_NAME:
-+    - LASOT
-+    - GOT10K_vottrain
-+    - COCO17
-+    - TRACKINGNET
-+    DATASETS_RATIO:
-+    - 1
-+    - 1
-+    - 1
-+    - 1
-+    SAMPLE_PER_EPOCH: 100
-+  VAL:
-+    DATASETS_NAME:
-+    - GOT10K_votval
-+    DATASETS_RATIO:
-+    - 1
-+    SAMPLE_PER_EPOCH: 20
-+MODEL:
-+  PRETRAIN_FILE: "output/checkpoints/train/ostrack/vitb_256_mae_ce_32x4_ep300/OSTrack_ep0300.pth.tar"
-+  EXTRA_MERGER: False
-+  RETURN_INTER: False
-+  BACKBONE:
-+    TYPE: vit_base_patch16_224_ce
-+    STRIDE: 16
-+    CE_LOC: [3, 6, 9]
-+    CE_KEEP_RATIO: [0.7, 0.7, 0.7]
-+    CE_TEMPLATE_RANGE: 'CTR_POINT'
-+  HEAD:
-+    TYPE: CENTER
-+    NUM_CHANNELS: 256
-+  RGSSB:
-+    ENABLE: True
-+TRAIN:
-+  BACKBONE_MULTIPLIER: 0.1
-+  DROP_PATH_RATE: 0.1
-+  CE_START_EPOCH: 20
-+  CE_WARM_EPOCH: 80
-+  BATCH_SIZE: 1
-+  EPOCH: 1
-+  GIOU_WEIGHT: 2.0
-+  L1_WEIGHT: 5.0
-+  GRAD_CLIP_NORM: 0.1
-+  LR: 0.0001
-+  LR_DROP_EPOCH: 1
-+  NUM_WORKER: 2
-+  OPTIMIZER: ADAMW
-+  PRINT_INTERVAL: 5
-+  FREEZE_MODE: "rgssb_only"
-+  SCHEDULER:
-+    TYPE: step
-+    DECAY_RATE: 0.1
-+  VAL_EPOCH_INTERVAL: 1
-+  WEIGHT_DECAY: 0.0001
-+  AMP: False
-+TEST:
-+  EPOCH: 300
-+  SEARCH_FACTOR: 4.0
-+  SEARCH_SIZE: 256
-+  TEMPLATE_FACTOR: 2.0
-+  TEMPLATE_SIZE: 128
 diff --git a/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_debug.yaml b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_debug.yaml
 new file mode 100644
 index 0000000..cc1bd10
@@ -596,6 +506,96 @@ index 0000000..594c2ab
 +  SEARCH_SIZE: 256
 +  TEMPLATE_FACTOR: 2.0
 +  TEMPLATE_SIZE: 128
+diff --git a/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_debug.yaml b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_debug.yaml
+new file mode 100644
+index 0000000..93c9f2a
+--- /dev/null
++++ b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_debug.yaml
+@@ -0,0 +1,84 @@
++# Debug-only RG-SSB training config.
++# This is intentionally tiny and should not be used as a final training recipe.
++DATA:
++  MAX_SAMPLE_INTERVAL: 200
++  MEAN:
++  - 0.485
++  - 0.456
++  - 0.406
++  SEARCH:
++    CENTER_JITTER: 3
++    FACTOR: 4.0
++    SCALE_JITTER: 0.25
++    SIZE: 256
++    NUMBER: 1
++  STD:
++  - 0.229
++  - 0.224
++  - 0.225
++  TEMPLATE:
++    CENTER_JITTER: 0
++    FACTOR: 2.0
++    SCALE_JITTER: 0
++    SIZE: 128
++  TRAIN:
++    DATASETS_NAME:
++    - LASOT
++    - GOT10K_vottrain
++    - COCO17
++    - TRACKINGNET
++    DATASETS_RATIO:
++    - 1
++    - 1
++    - 1
++    - 1
++    SAMPLE_PER_EPOCH: 100
++  VAL:
++    DATASETS_NAME:
++    - GOT10K_votval
++    DATASETS_RATIO:
++    - 1
++    SAMPLE_PER_EPOCH: 20
++MODEL:
++  PRETRAIN_FILE: "output/checkpoints/train/ostrack/vitb_256_mae_ce_32x4_ep300/OSTrack_ep0300.pth.tar"
++  EXTRA_MERGER: False
++  RETURN_INTER: False
++  BACKBONE:
++    TYPE: vit_base_patch16_224_ce
++    STRIDE: 16
++    CE_LOC: [3, 6, 9]
++    CE_KEEP_RATIO: [0.7, 0.7, 0.7]
++    CE_TEMPLATE_RANGE: 'CTR_POINT'
++  HEAD:
++    TYPE: CENTER
++    NUM_CHANNELS: 256
++  RGSSB:
++    ENABLE: True
++TRAIN:
++  BACKBONE_MULTIPLIER: 0.1
++  DROP_PATH_RATE: 0.1
++  CE_START_EPOCH: 20
++  CE_WARM_EPOCH: 80
++  BATCH_SIZE: 1
++  EPOCH: 1
++  GIOU_WEIGHT: 2.0
++  L1_WEIGHT: 5.0
++  GRAD_CLIP_NORM: 0.1
++  LR: 0.0001
++  LR_DROP_EPOCH: 1
++  NUM_WORKER: 2
++  OPTIMIZER: ADAMW
++  PRINT_INTERVAL: 5
++  FREEZE_MODE: "rgssb_only"
++  SCHEDULER:
++    TYPE: step
++    DECAY_RATE: 0.1
++  VAL_EPOCH_INTERVAL: 1
++  WEIGHT_DECAY: 0.0001
++  AMP: False
++TEST:
++  EPOCH: 300
++  SEARCH_FACTOR: 4.0
++  SEARCH_SIZE: 256
++  TEMPLATE_FACTOR: 2.0
++  TEMPLATE_SIZE: 128
 diff --git a/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_lasot_degraded_1000_debug.yaml b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_lasot_degraded_1000_debug.yaml
 new file mode 100644
 index 0000000..f606cea
@@ -678,6 +678,100 @@ index 0000000..f606cea
 +  OPTIMIZER: ADAMW
 +  PRINT_INTERVAL: 5
 +  FREEZE_MODE: "rgssb_only"
++  SCHEDULER:
++    TYPE: step
++    DECAY_RATE: 0.1
++  VAL_EPOCH_INTERVAL: 1
++  WEIGHT_DECAY: 0.0001
++  AMP: False
++TEST:
++  EPOCH: 1
++  SEARCH_FACTOR: 4.0
++  SEARCH_SIZE: 256
++  TEMPLATE_FACTOR: 2.0
++  TEMPLATE_SIZE: 128
+diff --git a/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_1000_debug.yaml b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_1000_debug.yaml
+new file mode 100644
+index 0000000..1d3fc87
+--- /dev/null
++++ b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_1000_debug.yaml
+@@ -0,0 +1,88 @@
++# Debug-only RG-SSB + head training config using verified local LaSOT and 1000 synthetic degraded samples.
++# Backbone remains frozen. This is intentionally local/debug scale.
++DATA:
++  MAX_SAMPLE_INTERVAL: 200
++  MEAN:
++  - 0.485
++  - 0.456
++  - 0.406
++  SEARCH:
++    CENTER_JITTER: 3
++    FACTOR: 4.0
++    SCALE_JITTER: 0.25
++    SIZE: 256
++    NUMBER: 1
++  STD:
++  - 0.229
++  - 0.224
++  - 0.225
++  TEMPLATE:
++    CENTER_JITTER: 0
++    FACTOR: 2.0
++    SCALE_JITTER: 0
++    SIZE: 128
++  TRAIN:
++    DATASETS_NAME:
++    - LASOT
++    DATASETS_RATIO:
++    - 1
++    SAMPLE_PER_EPOCH: 1000
++  VAL:
++    DATASETS_NAME:
++    - LASOT
++    DATASETS_RATIO:
++    - 1
++    SAMPLE_PER_EPOCH: 100
++  DEGRADATION:
++    ENABLE: True
++    PROBABILITY: 1.0
++    APPLY_TO: "search_only"
++    TYPES:
++    - motion_blur
++    - low_resolution
++    - gaussian_noise
++    SEVERITY: "medium"
++    SEED: 42
++MODEL:
++  PRETRAIN_FILE: "output/checkpoints/train/ostrack/vitb_256_mae_ce_32x4_ep300/OSTrack_ep0300.pth.tar"
++  EXTRA_MERGER: False
++  RETURN_INTER: False
++  BACKBONE:
++    TYPE: vit_base_patch16_224_ce
++    STRIDE: 16
++    CE_LOC: [3, 6, 9]
++    CE_KEEP_RATIO: [0.7, 0.7, 0.7]
++    CE_TEMPLATE_RANGE: 'CTR_POINT'
++  HEAD:
++    TYPE: CENTER
++    NUM_CHANNELS: 256
++  RGSSB:
++    ENABLE: True
++TRAIN:
++  BACKBONE_MULTIPLIER: 0.1
++  DROP_PATH_RATE: 0.1
++  CE_START_EPOCH: 20
++  CE_WARM_EPOCH: 80
++  BATCH_SIZE: 1
++  EPOCH: 1
++  GIOU_WEIGHT: 2.0
++  L1_WEIGHT: 5.0
++  GRAD_CLIP_NORM: 0.1
++  LR: 0.0001
++  LR_DROP_EPOCH: 1
++  NUM_WORKER: 2
++  OPTIMIZER: ADAMW
++  PRINT_INTERVAL: 5
++  FREEZE_MODE: "rgssb_head"
 +  SCHEDULER:
 +    TYPE: step
 +    DECAY_RATE: 0.1
@@ -850,10 +944,10 @@ index 0000000..165c239
 +        return residual + out
 diff --git a/lib/train/freeze.py b/lib/train/freeze.py
 new file mode 100644
-index 0000000..05c88ee
+index 0000000..6921a0b
 --- /dev/null
 +++ b/lib/train/freeze.py
-@@ -0,0 +1,42 @@
+@@ -0,0 +1,60 @@
 +def _is_main_process():
 +    try:
 +        from lib.utils.misc import is_main_process
@@ -892,6 +986,24 @@ index 0000000..05c88ee
 +            print("Trainable parameters: {}".format(trainable_params))
 +            print("Frozen parameters: {}".format(frozen_params))
 +            print("RG-SSB trainable parameter names:")
++            for name in trainable_names:
++                print(name)
++        return trainable_params, frozen_params, trainable_names
++    if freeze_mode == "rgssb_head":
++        for name, param in net.named_parameters():
++            param.requires_grad = name.startswith("rgssb") or name.startswith("box_head")
++        trainable_params, frozen_params, trainable_names = summarize_trainable_parameters(net)
++        has_rgssb = any(name.startswith("rgssb") for name in trainable_names)
++        has_head = any(name.startswith("box_head") for name in trainable_names)
++        if not has_rgssb or not has_head:
++            raise ValueError(
++                "TRAIN.FREEZE_MODE=rgssb_head requires trainable rgssb.* and box_head.* parameters."
++            )
++        if _is_main_process():
++            print("TRAIN.FREEZE_MODE=rgssb_head")
++            print("Trainable parameters: {}".format(trainable_params))
++            print("Frozen parameters: {}".format(frozen_params))
++            print("RG-SSB + head trainable parameter names:")
 +            for name in trainable_names:
 +                print(name)
 +        return trainable_params, frozen_params, trainable_names
