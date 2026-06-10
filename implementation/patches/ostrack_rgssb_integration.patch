@@ -1,5 +1,5 @@
 diff --git a/lib/config/ostrack/config.py b/lib/config/ostrack/config.py
-index 28f45bd..99f8a53 100644
+index 28f45bd..e428c47 100644
 --- a/lib/config/ostrack/config.py
 +++ b/lib/config/ostrack/config.py
 @@ -34,6 +34,20 @@ cfg.MODEL.HEAD = edict()
@@ -31,6 +31,23 @@ index 28f45bd..99f8a53 100644
  cfg.TRAIN.PRINT_INTERVAL = 50
  cfg.TRAIN.VAL_EPOCH_INTERVAL = 20
  cfg.TRAIN.GRAD_CLIP_NORM = 0.1
+@@ -77,6 +92,16 @@ cfg.DATA.VAL = edict()
+ cfg.DATA.VAL.DATASETS_NAME = ["GOT10K_votval"]
+ cfg.DATA.VAL.DATASETS_RATIO = [1]
+ cfg.DATA.VAL.SAMPLE_PER_EPOCH = 10000
++# DATA.DEGRADATION
++# Training-side synthetic degradation. Disabled by default so baseline
++# OSTrack data processing is unchanged.
++cfg.DATA.DEGRADATION = edict()
++cfg.DATA.DEGRADATION.ENABLE = False
++cfg.DATA.DEGRADATION.PROBABILITY = 0.0
++cfg.DATA.DEGRADATION.APPLY_TO = "search_only"
++cfg.DATA.DEGRADATION.TYPES = ["motion_blur", "low_resolution"]
++cfg.DATA.DEGRADATION.SEVERITY = "medium"
++cfg.DATA.DEGRADATION.SEED = 42
+ # DATA.SEARCH
+ cfg.DATA.SEARCH = edict()
+ cfg.DATA.SEARCH.SIZE = 320
 diff --git a/lib/models/ostrack/ostrack.py b/lib/models/ostrack/ostrack.py
 index 406d8e9..3238f12 100644
 --- a/lib/models/ostrack/ostrack.py
@@ -132,7 +149,7 @@ index 3674779..7cf67e2 100644
          self.network = network.cuda()
          self.network.eval()
 diff --git a/lib/train/base_functions.py b/lib/train/base_functions.py
-index b581748..a31dd2d 100644
+index b581748..1beb917 100644
 --- a/lib/train/base_functions.py
 +++ b/lib/train/base_functions.py
 @@ -6,6 +6,7 @@ from lib.train.dataset import Lasot_lmdb, Got10k_lmdb, MSCOCOSeq_lmdb, ImagenetV
@@ -143,7 +160,15 @@ index b581748..a31dd2d 100644
  
  
  def update_settings(settings, cfg):
-@@ -150,6 +151,7 @@ def build_dataloaders(cfg, settings):
+@@ -104,6 +105,7 @@ def build_dataloaders(cfg, settings):
+                                                        mode='sequence',
+                                                        transform=transform_train,
+                                                        joint_transform=transform_joint,
++                                                       degradation_cfg=cfg.DATA.DEGRADATION,
+                                                        settings=settings)
+ 
+     data_processing_val = processing.STARKProcessing(search_area_factor=search_area_factor,
+@@ -150,6 +152,7 @@ def build_dataloaders(cfg, settings):
  
  
  def get_optimizer_scheduler(net, cfg):
@@ -151,7 +176,7 @@ index b581748..a31dd2d 100644
      train_cls = getattr(cfg.TRAIN, "TRAIN_CLS", False)
      if train_cls:
          print("Only training classification head. Learnable parameters are shown below.")
-@@ -176,6 +178,10 @@ def get_optimizer_scheduler(net, cfg):
+@@ -176,6 +179,10 @@ def get_optimizer_scheduler(net, cfg):
                  if p.requires_grad:
                      print(n)
  
@@ -162,14 +187,60 @@ index b581748..a31dd2d 100644
      if cfg.TRAIN.OPTIMIZER == "ADAMW":
          optimizer = torch.optim.AdamW(param_dicts, lr=cfg.TRAIN.LR,
                                        weight_decay=cfg.TRAIN.WEIGHT_DECAY)
-diff --git a/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_debug.yaml b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_debug.yaml
+diff --git a/lib/train/data/processing.py b/lib/train/data/processing.py
+index 3accc9e..6a67309 100644
+--- a/lib/train/data/processing.py
++++ b/lib/train/data/processing.py
+@@ -3,6 +3,7 @@ import torchvision.transforms as transforms
+ from lib.utils import TensorDict
+ import lib.train.data.processing_utils as prutils
+ import torch.nn.functional as F
++from lib.train.data.degradation import TrainingDegradationAugmentor
+ 
+ 
+ def stack_tensors(x):
+@@ -46,7 +47,7 @@ class STARKProcessing(BaseProcessing):
+     """
+ 
+     def __init__(self, search_area_factor, output_sz, center_jitter_factor, scale_jitter_factor,
+-                 mode='pair', settings=None, *args, **kwargs):
++                 mode='pair', settings=None, degradation_cfg=None, *args, **kwargs):
+         """
+         args:
+             search_area_factor - The size of the search region  relative to the target size.
+@@ -65,6 +66,7 @@ class STARKProcessing(BaseProcessing):
+         self.scale_jitter_factor = scale_jitter_factor
+         self.mode = mode
+         self.settings = settings
++        self.degradation = TrainingDegradationAugmentor(degradation_cfg) if degradation_cfg is not None else None
+ 
+     def _get_jittered_box(self, box, mode):
+         """ Jitter the input box
+@@ -98,6 +100,9 @@ class STARKProcessing(BaseProcessing):
+             data['search_images'], data['search_anno'], data['search_masks'] = self.transform['joint'](
+                 image=data['search_images'], bbox=data['search_anno'], mask=data['search_masks'], new_roll=False)
+ 
++        if self.degradation is not None:
++            self.degradation.begin_sample()
++
+         for s in ['template', 'search']:
+             assert self.mode == 'sequence' or len(data[s + '_images']) == 1, \
+                 "In pair mode, num train/test frames must be 1"
+@@ -118,6 +123,8 @@ class STARKProcessing(BaseProcessing):
+             crops, boxes, att_mask, mask_crops = prutils.jittered_center_crop(data[s + '_images'], jittered_anno,
+                                                                               data[s + '_anno'], self.search_area_factor[s],
+                                                                               self.output_sz[s], masks=data[s + '_masks'])
++            if self.degradation is not None:
++                crops = self.degradation.apply(crops, role=s)
+             # Apply transforms
+             data[s + '_images'], data[s + '_anno'], data[s + '_att'], data[s + '_masks'] = self.transform[s](
+                 image=crops, bbox=boxes, att=att_mask, mask=mask_crops, joint=False)
+diff --git a/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_debug.yaml b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_debug.yaml
 new file mode 100644
-index 0000000..93c9f2a
+index 0000000..cc1bd10
 --- /dev/null
-+++ b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_debug.yaml
-@@ -0,0 +1,84 @@
-+# Debug-only RG-SSB training config.
-+# This is intentionally tiny and should not be used as a final training recipe.
++++ b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_debug.yaml
+@@ -0,0 +1,88 @@
 +DATA:
 +  MAX_SAMPLE_INTERVAL: 200
 +  MEAN:
@@ -191,6 +262,13 @@ index 0000000..93c9f2a
 +    FACTOR: 2.0
 +    SCALE_JITTER: 0
 +    SIZE: 128
++#  TRAIN:
++#    DATASETS_NAME:
++#      - GOT10K_train_full
++#    DATASETS_RATIO:
++#      - 1
++#    SAMPLE_PER_EPOCH: 60000
++
 +  TRAIN:
 +    DATASETS_NAME:
 +    - LASOT
@@ -202,15 +280,15 @@ index 0000000..93c9f2a
 +    - 1
 +    - 1
 +    - 1
-+    SAMPLE_PER_EPOCH: 100
++    SAMPLE_PER_EPOCH: 60000
 +  VAL:
 +    DATASETS_NAME:
 +    - GOT10K_votval
 +    DATASETS_RATIO:
 +    - 1
-+    SAMPLE_PER_EPOCH: 20
++    SAMPLE_PER_EPOCH: 10000
 +MODEL:
-+  PRETRAIN_FILE: "output/checkpoints/train/ostrack/vitb_256_mae_ce_32x4_ep300/OSTrack_ep0300.pth.tar"
++  PRETRAIN_FILE: "mae_pretrain_vit_base.pth"
 +  EXTRA_MERGER: False
 +  RETURN_INTER: False
 +  BACKBONE:
@@ -218,7 +296,7 @@ index 0000000..93c9f2a
 +    STRIDE: 16
 +    CE_LOC: [3, 6, 9]
 +    CE_KEEP_RATIO: [0.7, 0.7, 0.7]
-+    CE_TEMPLATE_RANGE: 'CTR_POINT'
++    CE_TEMPLATE_RANGE: 'CTR_POINT'  # choose between ALL, CTR_POINT, CTR_REC, GT_BOX
 +  HEAD:
 +    TYPE: CENTER
 +    NUM_CHANNELS: 256
@@ -227,23 +305,22 @@ index 0000000..93c9f2a
 +TRAIN:
 +  BACKBONE_MULTIPLIER: 0.1
 +  DROP_PATH_RATE: 0.1
-+  CE_START_EPOCH: 20
-+  CE_WARM_EPOCH: 80
-+  BATCH_SIZE: 1
-+  EPOCH: 1
++  CE_START_EPOCH: 20  # candidate elimination start epoch
++  CE_WARM_EPOCH: 80  # candidate elimination warm up epoch
++  BATCH_SIZE: 32
++  EPOCH: 300
 +  GIOU_WEIGHT: 2.0
 +  L1_WEIGHT: 5.0
 +  GRAD_CLIP_NORM: 0.1
-+  LR: 0.0001
-+  LR_DROP_EPOCH: 1
-+  NUM_WORKER: 2
++  LR: 0.0004
++  LR_DROP_EPOCH: 240
++  NUM_WORKER: 10
 +  OPTIMIZER: ADAMW
-+  PRINT_INTERVAL: 5
-+  FREEZE_MODE: "rgssb_only"
++  PRINT_INTERVAL: 50
 +  SCHEDULER:
 +    TYPE: step
 +    DECAY_RATE: 0.1
-+  VAL_EPOCH_INTERVAL: 1
++  VAL_EPOCH_INTERVAL: 20
 +  WEIGHT_DECAY: 0.0001
 +  AMP: False
 +TEST:
@@ -336,6 +413,237 @@ index 0000000..32a4841
 +  SEARCH_SIZE: 256
 +  TEMPLATE_FACTOR: 2.0
 +  TEMPLATE_SIZE: 128
+diff --git a/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_debug.yaml b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_debug.yaml
+new file mode 100644
+index 0000000..93c9f2a
+--- /dev/null
++++ b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_debug.yaml
+@@ -0,0 +1,84 @@
++# Debug-only RG-SSB training config.
++# This is intentionally tiny and should not be used as a final training recipe.
++DATA:
++  MAX_SAMPLE_INTERVAL: 200
++  MEAN:
++  - 0.485
++  - 0.456
++  - 0.406
++  SEARCH:
++    CENTER_JITTER: 3
++    FACTOR: 4.0
++    SCALE_JITTER: 0.25
++    SIZE: 256
++    NUMBER: 1
++  STD:
++  - 0.229
++  - 0.224
++  - 0.225
++  TEMPLATE:
++    CENTER_JITTER: 0
++    FACTOR: 2.0
++    SCALE_JITTER: 0
++    SIZE: 128
++  TRAIN:
++    DATASETS_NAME:
++    - LASOT
++    - GOT10K_vottrain
++    - COCO17
++    - TRACKINGNET
++    DATASETS_RATIO:
++    - 1
++    - 1
++    - 1
++    - 1
++    SAMPLE_PER_EPOCH: 100
++  VAL:
++    DATASETS_NAME:
++    - GOT10K_votval
++    DATASETS_RATIO:
++    - 1
++    SAMPLE_PER_EPOCH: 20
++MODEL:
++  PRETRAIN_FILE: "output/checkpoints/train/ostrack/vitb_256_mae_ce_32x4_ep300/OSTrack_ep0300.pth.tar"
++  EXTRA_MERGER: False
++  RETURN_INTER: False
++  BACKBONE:
++    TYPE: vit_base_patch16_224_ce
++    STRIDE: 16
++    CE_LOC: [3, 6, 9]
++    CE_KEEP_RATIO: [0.7, 0.7, 0.7]
++    CE_TEMPLATE_RANGE: 'CTR_POINT'
++  HEAD:
++    TYPE: CENTER
++    NUM_CHANNELS: 256
++  RGSSB:
++    ENABLE: True
++TRAIN:
++  BACKBONE_MULTIPLIER: 0.1
++  DROP_PATH_RATE: 0.1
++  CE_START_EPOCH: 20
++  CE_WARM_EPOCH: 80
++  BATCH_SIZE: 1
++  EPOCH: 1
++  GIOU_WEIGHT: 2.0
++  L1_WEIGHT: 5.0
++  GRAD_CLIP_NORM: 0.1
++  LR: 0.0001
++  LR_DROP_EPOCH: 1
++  NUM_WORKER: 2
++  OPTIMIZER: ADAMW
++  PRINT_INTERVAL: 5
++  FREEZE_MODE: "rgssb_only"
++  SCHEDULER:
++    TYPE: step
++    DECAY_RATE: 0.1
++  VAL_EPOCH_INTERVAL: 1
++  WEIGHT_DECAY: 0.0001
++  AMP: False
++TEST:
++  EPOCH: 300
++  SEARCH_FACTOR: 4.0
++  SEARCH_SIZE: 256
++  TEMPLATE_FACTOR: 2.0
++  TEMPLATE_SIZE: 128
+diff --git a/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_lasot_degraded_debug.yaml b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_lasot_degraded_debug.yaml
+new file mode 100644
+index 0000000..594c2ab
+--- /dev/null
++++ b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_lasot_degraded_debug.yaml
+@@ -0,0 +1,87 @@
++# Debug-only RG-SSB training config using verified local LaSOT and synthetic search degradations.
++# This is intentionally tiny and should not be used as a final training recipe.
++DATA:
++  MAX_SAMPLE_INTERVAL: 200
++  MEAN:
++  - 0.485
++  - 0.456
++  - 0.406
++  SEARCH:
++    CENTER_JITTER: 3
++    FACTOR: 4.0
++    SCALE_JITTER: 0.25
++    SIZE: 256
++    NUMBER: 1
++  STD:
++  - 0.229
++  - 0.224
++  - 0.225
++  TEMPLATE:
++    CENTER_JITTER: 0
++    FACTOR: 2.0
++    SCALE_JITTER: 0
++    SIZE: 128
++  TRAIN:
++    DATASETS_NAME:
++    - LASOT
++    DATASETS_RATIO:
++    - 1
++    SAMPLE_PER_EPOCH: 100
++  VAL:
++    DATASETS_NAME:
++    - LASOT
++    DATASETS_RATIO:
++    - 1
++    SAMPLE_PER_EPOCH: 20
++  DEGRADATION:
++    ENABLE: True
++    PROBABILITY: 1.0
++    APPLY_TO: "search_only"
++    TYPES:
++    - motion_blur
++    - low_resolution
++    SEVERITY: "medium"
++    SEED: 42
++MODEL:
++  PRETRAIN_FILE: "output/checkpoints/train/ostrack/vitb_256_mae_ce_32x4_ep300/OSTrack_ep0300.pth.tar"
++  EXTRA_MERGER: False
++  RETURN_INTER: False
++  BACKBONE:
++    TYPE: vit_base_patch16_224_ce
++    STRIDE: 16
++    CE_LOC: [3, 6, 9]
++    CE_KEEP_RATIO: [0.7, 0.7, 0.7]
++    CE_TEMPLATE_RANGE: 'CTR_POINT'
++  HEAD:
++    TYPE: CENTER
++    NUM_CHANNELS: 256
++  RGSSB:
++    ENABLE: True
++TRAIN:
++  BACKBONE_MULTIPLIER: 0.1
++  DROP_PATH_RATE: 0.1
++  CE_START_EPOCH: 20
++  CE_WARM_EPOCH: 80
++  BATCH_SIZE: 1
++  EPOCH: 1
++  GIOU_WEIGHT: 2.0
++  L1_WEIGHT: 5.0
++  GRAD_CLIP_NORM: 0.1
++  LR: 0.0001
++  LR_DROP_EPOCH: 1
++  NUM_WORKER: 2
++  OPTIMIZER: ADAMW
++  PRINT_INTERVAL: 5
++  FREEZE_MODE: "rgssb_only"
++  SCHEDULER:
++    TYPE: step
++    DECAY_RATE: 0.1
++  VAL_EPOCH_INTERVAL: 1
++  WEIGHT_DECAY: 0.0001
++  AMP: False
++TEST:
++  EPOCH: 1
++  SEARCH_FACTOR: 4.0
++  SEARCH_SIZE: 256
++  TEMPLATE_FACTOR: 2.0
++  TEMPLATE_SIZE: 128
+diff --git a/lib/train/freeze.py b/lib/train/freeze.py
+new file mode 100644
+index 0000000..05c88ee
+--- /dev/null
++++ b/lib/train/freeze.py
+@@ -0,0 +1,42 @@
++def _is_main_process():
++    try:
++        from lib.utils.misc import is_main_process
++
++        return is_main_process()
++    except Exception:
++        return True
++
++
++def summarize_trainable_parameters(net):
++    trainable_params = 0
++    frozen_params = 0
++    trainable_names = []
++    for name, param in net.named_parameters():
++        num_params = param.numel()
++        if param.requires_grad:
++            trainable_params += num_params
++            trainable_names.append(name)
++        else:
++            frozen_params += num_params
++    return trainable_params, frozen_params, trainable_names
++
++
++def apply_freeze_mode(net, cfg):
++    freeze_mode = getattr(cfg.TRAIN, "FREEZE_MODE", "none")
++    if freeze_mode == "none":
++        return summarize_trainable_parameters(net)
++    if freeze_mode == "rgssb_only":
++        for name, param in net.named_parameters():
++            param.requires_grad = "rgssb" in name
++        trainable_params, frozen_params, trainable_names = summarize_trainable_parameters(net)
++        if len(trainable_names) == 0:
++            raise ValueError("TRAIN.FREEZE_MODE=rgssb_only selected, but no rgssb parameters are trainable.")
++        if _is_main_process():
++            print("TRAIN.FREEZE_MODE=rgssb_only")
++            print("Trainable parameters: {}".format(trainable_params))
++            print("Frozen parameters: {}".format(frozen_params))
++            print("RG-SSB trainable parameter names:")
++            for name in trainable_names:
++                print(name)
++        return trainable_params, frozen_params, trainable_names
++    raise ValueError("Unsupported TRAIN.FREEZE_MODE: {}".format(freeze_mode))
 diff --git a/lib/models/layers/rgssb.py b/lib/models/layers/rgssb.py
 new file mode 100644
 index 0000000..165c239
@@ -494,145 +802,187 @@ index 0000000..165c239
 +        out = self.out_proj(fused)
 +        out = self.dropout(out)
 +        return residual + out
-diff --git a/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_debug.yaml b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_debug.yaml
+diff --git a/lib/train/data/degradation.py b/lib/train/data/degradation.py
 new file mode 100644
-index 0000000..cc1bd10
+index 0000000..da6a213
 --- /dev/null
-+++ b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_debug.yaml
-@@ -0,0 +1,88 @@
-+DATA:
-+  MAX_SAMPLE_INTERVAL: 200
-+  MEAN:
-+  - 0.485
-+  - 0.456
-+  - 0.406
-+  SEARCH:
-+    CENTER_JITTER: 3
-+    FACTOR: 4.0
-+    SCALE_JITTER: 0.25
-+    SIZE: 256
-+    NUMBER: 1
-+  STD:
-+  - 0.229
-+  - 0.224
-+  - 0.225
-+  TEMPLATE:
-+    CENTER_JITTER: 0
-+    FACTOR: 2.0
-+    SCALE_JITTER: 0
-+    SIZE: 128
-+#  TRAIN:
-+#    DATASETS_NAME:
-+#      - GOT10K_train_full
-+#    DATASETS_RATIO:
-+#      - 1
-+#    SAMPLE_PER_EPOCH: 60000
++++ b/lib/train/data/degradation.py
+@@ -0,0 +1,178 @@
++"""Training-side synthetic degradations for OSTrack debug experiments.
 +
-+  TRAIN:
-+    DATASETS_NAME:
-+    - LASOT
-+    - GOT10K_vottrain
-+    - COCO17
-+    - TRACKINGNET
-+    DATASETS_RATIO:
-+    - 1
-+    - 1
-+    - 1
-+    - 1
-+    SAMPLE_PER_EPOCH: 60000
-+  VAL:
-+    DATASETS_NAME:
-+    - GOT10K_votval
-+    DATASETS_RATIO:
-+    - 1
-+    SAMPLE_PER_EPOCH: 10000
-+MODEL:
-+  PRETRAIN_FILE: "mae_pretrain_vit_base.pth"
-+  EXTRA_MERGER: False
-+  RETURN_INTER: False
-+  BACKBONE:
-+    TYPE: vit_base_patch16_224_ce
-+    STRIDE: 16
-+    CE_LOC: [3, 6, 9]
-+    CE_KEEP_RATIO: [0.7, 0.7, 0.7]
-+    CE_TEMPLATE_RANGE: 'CTR_POINT'  # choose between ALL, CTR_POINT, CTR_REC, GT_BOX
-+  HEAD:
-+    TYPE: CENTER
-+    NUM_CHANNELS: 256
-+  RGSSB:
-+    ENABLE: True
-+TRAIN:
-+  BACKBONE_MULTIPLIER: 0.1
-+  DROP_PATH_RATE: 0.1
-+  CE_START_EPOCH: 20  # candidate elimination start epoch
-+  CE_WARM_EPOCH: 80  # candidate elimination warm up epoch
-+  BATCH_SIZE: 32
-+  EPOCH: 300
-+  GIOU_WEIGHT: 2.0
-+  L1_WEIGHT: 5.0
-+  GRAD_CLIP_NORM: 0.1
-+  LR: 0.0004
-+  LR_DROP_EPOCH: 240
-+  NUM_WORKER: 10
-+  OPTIMIZER: ADAMW
-+  PRINT_INTERVAL: 50
-+  SCHEDULER:
-+    TYPE: step
-+    DECAY_RATE: 0.1
-+  VAL_EPOCH_INTERVAL: 20
-+  WEIGHT_DECAY: 0.0001
-+  AMP: False
-+TEST:
-+  EPOCH: 300
-+  SEARCH_FACTOR: 4.0
-+  SEARCH_SIZE: 256
-+  TEMPLATE_FACTOR: 2.0
-+  TEMPLATE_SIZE: 128
-diff --git a/lib/train/freeze.py b/lib/train/freeze.py
-new file mode 100644
-index 0000000..05c88ee
---- /dev/null
-+++ b/lib/train/freeze.py
-@@ -0,0 +1,42 @@
-+def _is_main_process():
-+    try:
-+        from lib.utils.misc import is_main_process
++This is a small local adapter copied from the project degradation logic to keep
++OSTrack training independent from the main project import path. All transforms
++preserve image size and do not modify boxes or masks.
++"""
 +
-+        return is_main_process()
-+    except Exception:
-+        return True
++from __future__ import annotations
++
++from io import BytesIO
++
++import numpy as np
++from PIL import Image
 +
 +
-+def summarize_trainable_parameters(net):
-+    trainable_params = 0
-+    frozen_params = 0
-+    trainable_names = []
-+    for name, param in net.named_parameters():
-+        num_params = param.numel()
-+        if param.requires_grad:
-+            trainable_params += num_params
-+            trainable_names.append(name)
-+        else:
-+            frozen_params += num_params
-+    return trainable_params, frozen_params, trainable_names
++SEVERITIES = ("mild", "medium", "severe")
++DEGRADATION_TYPES = ("motion_blur", "low_resolution", "jpeg_compression", "gaussian_noise")
++APPLY_TO_MODES = ("search_only", "template_only", "both_same", "both_different")
++
++if hasattr(Image, "Resampling"):
++    BICUBIC = Image.Resampling.BICUBIC
++else:
++    BICUBIC = Image.BICUBIC
 +
 +
-+def apply_freeze_mode(net, cfg):
-+    freeze_mode = getattr(cfg.TRAIN, "FREEZE_MODE", "none")
-+    if freeze_mode == "none":
-+        return summarize_trainable_parameters(net)
-+    if freeze_mode == "rgssb_only":
-+        for name, param in net.named_parameters():
-+            param.requires_grad = "rgssb" in name
-+        trainable_params, frozen_params, trainable_names = summarize_trainable_parameters(net)
-+        if len(trainable_names) == 0:
-+            raise ValueError("TRAIN.FREEZE_MODE=rgssb_only selected, but no rgssb parameters are trainable.")
-+        if _is_main_process():
-+            print("TRAIN.FREEZE_MODE=rgssb_only")
-+            print("Trainable parameters: {}".format(trainable_params))
-+            print("Frozen parameters: {}".format(frozen_params))
-+            print("RG-SSB trainable parameter names:")
-+            for name in trainable_names:
-+                print(name)
-+        return trainable_params, frozen_params, trainable_names
-+    raise ValueError("Unsupported TRAIN.FREEZE_MODE: {}".format(freeze_mode))
++def _as_list(value) -> list[str]:
++    if isinstance(value, str):
++        return [value]
++    return [str(v) for v in value]
++
++
++def _to_uint8_rgb(image: np.ndarray) -> np.ndarray:
++    arr = np.asarray(image)
++    if arr.ndim == 2:
++        arr = np.repeat(arr[:, :, None], 3, axis=2)
++    if arr.ndim != 3 or arr.shape[2] not in (1, 3, 4):
++        raise ValueError("Expected image array with shape HxW, HxWx1, HxWx3, or HxWx4")
++    if arr.shape[2] == 1:
++        arr = np.repeat(arr, 3, axis=2)
++    if arr.shape[2] == 4:
++        arr = arr[:, :, :3]
++    if np.issubdtype(arr.dtype, np.floating):
++        max_value = float(np.nanmax(arr)) if arr.size else 1.0
++        if max_value <= 1.0:
++            arr = arr * 255.0
++    return np.clip(arr, 0, 255).astype(np.uint8)
++
++
++def _restore_dtype(arr: np.ndarray, reference: np.ndarray) -> np.ndarray:
++    if np.issubdtype(reference.dtype, np.floating):
++        if reference.size and float(np.nanmax(reference)) <= 1.0:
++            return (arr.astype(np.float32) / 255.0).astype(reference.dtype)
++        return arr.astype(reference.dtype)
++    return arr.astype(reference.dtype)
++
++
++def _pil_from_array(image: np.ndarray) -> Image.Image:
++    return Image.fromarray(_to_uint8_rgb(image), mode="RGB")
++
++
++def _array_from_pil(image: Image.Image, reference: np.ndarray) -> np.ndarray:
++    return _restore_dtype(np.asarray(image.convert("RGB")), np.asarray(reference))
++
++
++def motion_blur(image: np.ndarray, severity: str, rng: np.random.Generator) -> np.ndarray:
++    kernel_sizes = {"mild": 7, "medium": 13, "severe": 21}
++    kernel_size = kernel_sizes[severity]
++    radius = kernel_size // 2
++    angle = float(rng.uniform(0.0, 180.0))
++    theta = np.deg2rad(angle)
++    offsets = np.linspace(-radius, radius, kernel_size)
++    dx = np.rint(np.cos(theta) * offsets).astype(int)
++    dy = np.rint(np.sin(theta) * offsets).astype(int)
++
++    arr = _to_uint8_rgb(image).astype(np.float32)
++    padded = np.pad(arr, ((radius, radius), (radius, radius), (0, 0)), mode="edge")
++    height, width = arr.shape[:2]
++    accum = np.zeros_like(arr, dtype=np.float32)
++    for shift_x, shift_y in zip(dx, dy):
++        y0 = radius + shift_y
++        x0 = radius + shift_x
++        accum += padded[y0 : y0 + height, x0 : x0 + width, :]
++    out = np.clip(accum / float(kernel_size), 0, 255).astype(np.uint8)
++    return _restore_dtype(out, np.asarray(image))
++
++
++def low_resolution(image: np.ndarray, severity: str, rng: np.random.Generator) -> np.ndarray:
++    del rng
++    scales = {"mild": 0.75, "medium": 0.5, "severe": 0.25}
++    pil = _pil_from_array(image)
++    width, height = pil.size
++    scale = scales[severity]
++    low_size = (max(1, int(round(width * scale))), max(1, int(round(height * scale))))
++    out = pil.resize(low_size, BICUBIC).resize((width, height), BICUBIC)
++    return _array_from_pil(out, np.asarray(image))
++
++
++def jpeg_compression(image: np.ndarray, severity: str, rng: np.random.Generator) -> np.ndarray:
++    del rng
++    qualities = {"mild": 70, "medium": 40, "severe": 18}
++    buffer = BytesIO()
++    _pil_from_array(image).save(buffer, format="JPEG", quality=qualities[severity])
++    buffer.seek(0)
++    out = Image.open(buffer).convert("RGB")
++    return _array_from_pil(out, np.asarray(image))
++
++
++def gaussian_noise(image: np.ndarray, severity: str, rng: np.random.Generator) -> np.ndarray:
++    sigmas = {"mild": 8.0, "medium": 20.0, "severe": 40.0}
++    arr = _to_uint8_rgb(image).astype(np.float32)
++    out = np.clip(arr + rng.normal(0.0, sigmas[severity], size=arr.shape), 0, 255).astype(np.uint8)
++    return _restore_dtype(out, np.asarray(image))
++
++
++TRANSFORMS = {
++    "motion_blur": motion_blur,
++    "low_resolution": low_resolution,
++    "jpeg_compression": jpeg_compression,
++    "gaussian_noise": gaussian_noise,
++}
++
++
++class TrainingDegradationAugmentor:
++    """Config-driven degradation augmentor for cropped template/search images."""
++
++    def __init__(self, cfg):
++        self.enabled = bool(getattr(cfg, "ENABLE", False))
++        self.probability = float(getattr(cfg, "PROBABILITY", 0.0))
++        self.apply_to = str(getattr(cfg, "APPLY_TO", "search_only")).lower()
++        self.types = [t.lower() for t in _as_list(getattr(cfg, "TYPES", ["motion_blur", "low_resolution"]))]
++        self.severity = str(getattr(cfg, "SEVERITY", "medium")).lower()
++        self.rng = np.random.default_rng(int(getattr(cfg, "SEED", 42)))
++        self._sample = {"template": None, "search": None}
++        self._validate()
++
++    def _validate(self) -> None:
++        if self.apply_to not in APPLY_TO_MODES:
++            raise ValueError(f"Unsupported DATA.DEGRADATION.APPLY_TO: {self.apply_to}")
++        if self.severity not in SEVERITIES:
++            raise ValueError(f"Unsupported DATA.DEGRADATION.SEVERITY: {self.severity}")
++        if not 0.0 <= self.probability <= 1.0:
++            raise ValueError("DATA.DEGRADATION.PROBABILITY must be in [0, 1]")
++        unknown = [t for t in self.types if t not in DEGRADATION_TYPES]
++        if unknown:
++            raise ValueError(f"Unsupported DATA.DEGRADATION.TYPES: {unknown}")
++        if self.apply_to == "both_different" and len(set(self.types)) < 2:
++            raise ValueError("DATA.DEGRADATION.APPLY_TO=both_different requires at least two types")
++
++    def begin_sample(self) -> None:
++        self._sample = {"template": None, "search": None}
++        if not self.enabled or float(self.rng.random()) > self.probability:
++            return
++
++        if self.apply_to == "search_only":
++            self._sample["search"] = str(self.rng.choice(self.types))
++        elif self.apply_to == "template_only":
++            self._sample["template"] = str(self.rng.choice(self.types))
++        elif self.apply_to == "both_same":
++            choice = str(self.rng.choice(self.types))
++            self._sample["template"] = choice
++            self._sample["search"] = choice
++        elif self.apply_to == "both_different":
++            choices = self.rng.choice(self.types, size=2, replace=False).tolist()
++            self._sample["template"] = str(choices[0])
++            self._sample["search"] = str(choices[1])
++
++    def apply(self, images: list[np.ndarray], role: str) -> list[np.ndarray]:
++        degradation_type = self._sample.get(role)
++        if degradation_type is None:
++            return images
++
++        transformed = []
++        for image in images:
++            out = TRANSFORMS[degradation_type](image, self.severity, self.rng)
++            if out.shape[:2] != image.shape[:2]:
++                raise RuntimeError("Training degradation changed image size")
++            transformed.append(out)
++        return transformed
