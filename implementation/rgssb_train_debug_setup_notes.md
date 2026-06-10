@@ -9,6 +9,7 @@ This setup adds the smallest RG-SSB-only training/debug path for OSTrack. It doe
 External OSTrack files modified or created:
 
 - `external/OSTrack/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_debug.yaml`
+- `external/OSTrack/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_lasot_debug.yaml`
 - `external/OSTrack/lib/config/ostrack/config.py`
 - `external/OSTrack/lib/train/freeze.py`
 - `external/OSTrack/lib/train/base_functions.py`
@@ -17,6 +18,7 @@ External OSTrack files modified or created:
 Main project files created or modified:
 
 - `scripts/verify_rgssb_trainable_params.py`
+- `scripts/verify_lasot_rgssb_train_debug.py`
 - `implementation/rgssb_train_debug_setup_notes.md`
 - `implementation/patches/ostrack_rgssb_integration.patch`
 
@@ -41,6 +43,38 @@ This config is debug-only. It keeps OSTrack template/search sizes unchanged and 
 - `TRAIN.FREEZE_MODE: "rgssb_only"`
 - `DATA.TRAIN.SAMPLE_PER_EPOCH: 100`
 - `DATA.VAL.SAMPLE_PER_EPOCH: 20`
+
+## LaSOT-Only Debug Config
+
+Config name:
+
+`vitb_256_mae_ce_32x4_ep300_rgssb_train_lasot_debug`
+
+Path:
+
+`external/OSTrack/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_lasot_debug.yaml`
+
+This is the preferred first smoke-training config because local LaSOT was verified manually:
+
+- `external/OSTrack/data/lasot` points to `/home/abdel/Desktop/lasot`
+- `Lasot(root="data/lasot", split="train")` creates 1120 sequences
+- sample frames load successfully
+
+The LaSOT-only config uses:
+
+- `DATA.TRAIN.DATASETS_NAME: ["LASOT"]`
+- `DATA.TRAIN.DATASETS_RATIO: [1]`
+- `DATA.TRAIN.SAMPLE_PER_EPOCH: 100`
+- `DATA.VAL.DATASETS_NAME: ["LASOT"]`
+- `DATA.VAL.DATASETS_RATIO: [1]`
+- `DATA.VAL.SAMPLE_PER_EPOCH: 20`
+- `MODEL.RGSSB.ENABLE: True`
+- `TRAIN.FREEZE_MODE: "rgssb_only"`
+- `TRAIN.BATCH_SIZE: 1`
+- `TRAIN.NUM_WORKER: 2`
+- `TRAIN.EPOCH: 1`
+
+GOT-10k, COCO, and TrackingNet are postponed because their local train/val paths have not been verified for this debug run. OTB is also postponed for training because it is not part of the inspected OSTrack training dataset registry.
 
 ## Freeze Mode Behavior
 
@@ -77,6 +111,8 @@ Run:
 ```bash
 conda run -n ostrack python -m py_compile scripts/verify_rgssb_trainable_params.py
 conda run -n ostrack python scripts/verify_rgssb_trainable_params.py
+conda run -n ostrack python -m py_compile scripts/verify_lasot_rgssb_train_debug.py
+conda run -n ostrack python scripts/verify_lasot_rgssb_train_debug.py
 ```
 
 Expected result:
@@ -95,13 +131,13 @@ Run this manually outside Codex when ready:
 cd external/OSTrack
 conda run -n ostrack python lib/train/run_training.py \
   --script ostrack \
-  --config vitb_256_mae_ce_32x4_ep300_rgssb_train_debug \
+  --config vitb_256_mae_ce_32x4_ep300_rgssb_train_lasot_debug \
   --save_dir output \
   --use_lmdb 0 \
   --use_wandb 0
 ```
 
-This command uses the debug config's 1 epoch and 100 training samples. It is still real training, so it was not run during setup.
+This command uses the LaSOT-only debug config's 1 epoch and 100 training samples. It is still real training, so it was not run during setup.
 
 ## Postponed
 
