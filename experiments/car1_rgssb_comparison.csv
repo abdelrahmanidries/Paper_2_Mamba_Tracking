@@ -1,0 +1,16 @@
+condition,degradation,severity,seed,comparison_config,baseline_auc,rgssb_auc,auc_diff,baseline_precision_20,rgssb_precision_20,precision_20_diff,baseline_mean_center_error,rgssb_mean_center_error,center_error_diff,baseline_mean_iou,rgssb_mean_iou,mean_iou_diff,baseline_frames,rgssb_frames,status
+clean,clean,none,0,vitb_256_mae_ce_32x4_ep300_rgssb_debug,0.575995,0.610784,0.034789,0.746078,0.798039,0.051961,16.455626,13.783039,-2.672587,0.575457,0.610859,0.035402,1020,1020,ok
+clean,clean,none,0,vitb_256_mae_ce_32x4_ep300_rgssb_train_lasot_debug,0.575995,0.544224,-0.031771,0.746078,0.724510,-0.021568,16.455626,17.840605,1.384979,0.575457,0.543332,-0.032125,1020,1020,ok
+clean,clean,none,0,vitb_256_mae_ce_32x4_ep300_rgssb_train_lasot_degraded_debug,0.575995,0.557173,-0.018822,0.746078,0.729412,-0.016666,16.455626,17.474512,1.018886,0.575457,0.556524,-0.018933,1020,1020,ok
+motion_blur_medium,motion_blur,medium,42,vitb_256_mae_ce_32x4_ep300_rgssb_debug,0.157212,0.157047,-0.000165,0.198039,0.200000,0.001961,82.957024,84.030502,1.073478,0.150176,0.150142,-0.000034,1020,1020,ok
+motion_blur_medium,motion_blur,medium,42,vitb_256_mae_ce_32x4_ep300_rgssb_train_lasot_debug,0.157212,0.147321,-0.009891,0.198039,0.185294,-0.012745,82.957024,79.344498,-3.612526,0.150176,0.142086,-0.008090,1020,1020,ok
+motion_blur_medium,motion_blur,medium,42,vitb_256_mae_ce_32x4_ep300_rgssb_train_lasot_degraded_debug,0.157212,0.156805,-0.000407,0.198039,0.200980,0.002941,82.957024,75.277245,-7.679779,0.150176,0.151489,0.001313,1020,1020,ok
+low_resolution_medium,low_resolution,medium,42,vitb_256_mae_ce_32x4_ep300_rgssb_debug,,,,,,,,,,,,,1020,,missing_rgssb
+low_resolution_medium,low_resolution,medium,42,vitb_256_mae_ce_32x4_ep300_rgssb_train_lasot_debug,,,,,,,,,,,,,1020,,missing_rgssb
+low_resolution_medium,low_resolution,medium,42,vitb_256_mae_ce_32x4_ep300_rgssb_train_lasot_degraded_debug,0.214881,0.196525,-0.018356,0.267647,0.247059,-0.020588,55.176579,69.262650,14.086071,0.208387,0.189750,-0.018637,1020,1020,ok
+jpeg_compression_medium,jpeg_compression,medium,42,vitb_256_mae_ce_32x4_ep300_rgssb_debug,,,,,,,,,,,,,1020,,missing_rgssb
+jpeg_compression_medium,jpeg_compression,medium,42,vitb_256_mae_ce_32x4_ep300_rgssb_train_lasot_debug,,,,,,,,,,,,,1020,,missing_rgssb
+jpeg_compression_medium,jpeg_compression,medium,42,vitb_256_mae_ce_32x4_ep300_rgssb_train_lasot_degraded_debug,0.240012,0.238924,-0.001088,0.298039,0.300980,0.002941,57.769341,58.358963,0.589622,0.233947,0.232879,-0.001068,1020,1020,ok
+gaussian_noise_medium,gaussian_noise,medium,42,vitb_256_mae_ce_32x4_ep300_rgssb_debug,,,,,,,,,,,,,1020,,missing_rgssb
+gaussian_noise_medium,gaussian_noise,medium,42,vitb_256_mae_ce_32x4_ep300_rgssb_train_lasot_debug,,,,,,,,,,,,,1020,,missing_rgssb
+gaussian_noise_medium,gaussian_noise,medium,42,vitb_256_mae_ce_32x4_ep300_rgssb_train_lasot_degraded_debug,0.207270,0.221782,0.014512,0.250980,0.281373,0.030393,64.898727,62.899677,-1.999050,0.200663,0.215449,0.014786,1020,1020,ok
