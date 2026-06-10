@@ -10,6 +10,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -81,6 +83,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--num_gpus", default=1, type=int)
     parser.add_argument("--threads", default=0, type=int)
+    parser.add_argument(
+        "--check_only",
+        action="store_true",
+        help="Validate inputs, print resolved checkpoint/output paths, and exit without running OSTrack.",
+    )
     return parser.parse_args()
 
 
@@ -90,20 +97,54 @@ def resolve_existing(path: Path) -> Path:
     return path.resolve()
 
 
-def validate_inputs(args: argparse.Namespace) -> tuple[Path, Path, Path]:
-    ostrack_root = resolve_existing(args.ostrack_root)
-    clean_otb_root = resolve_existing(args.clean_otb_root)
-    eval_otb_root = resolve_existing(args.eval_otb_root)
+def read_test_epoch(ostrack_root: Path, tracker: str, config: str) -> int:
+    config_path = ostrack_root / "experiments" / tracker / f"{config}.yaml"
+    if not config_path.is_file():
+        raise FileNotFoundError(f"OSTrack config file not found: {config_path}")
 
-    checkpoint = (
+    with config_path.open("r", encoding="utf-8") as config_file:
+        config_data = yaml.safe_load(config_file) or {}
+
+    try:
+        test_epoch = config_data["TEST"]["EPOCH"]
+    except KeyError as exc:
+        raise KeyError(f"TEST.EPOCH missing in OSTrack config: {config_path}") from exc
+
+    try:
+        return int(test_epoch)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"TEST.EPOCH must be an integer in OSTrack config: {config_path}") from exc
+
+
+def expected_checkpoint_path(ostrack_root: Path, tracker: str, config: str) -> Path:
+    test_epoch = read_test_epoch(ostrack_root, tracker, config)
+    return (
         ostrack_root
         / "output"
         / "checkpoints"
         / "train"
+        / tracker
+        / config
+        / f"OSTrack_ep{test_epoch:04d}.pth.tar"
+    )
+
+
+def output_run_dir(args: argparse.Namespace) -> Path:
+    return (
+        args.output_dir
         / args.tracker
         / args.config
-        / "OSTrack_ep0300.pth.tar"
+        / args.sequence
+        / f"{args.degradation}_{args.severity}_seed{args.seed}"
     )
+
+
+def validate_inputs(args: argparse.Namespace) -> tuple[Path, Path, Path, Path]:
+    ostrack_root = resolve_existing(args.ostrack_root)
+    clean_otb_root = resolve_existing(args.clean_otb_root)
+    eval_otb_root = resolve_existing(args.eval_otb_root)
+
+    checkpoint = expected_checkpoint_path(ostrack_root, args.tracker, args.config)
     eval_img_dir = eval_otb_root / args.sequence / "img"
     eval_gt_path = eval_otb_root / args.sequence / "groundtruth_rect.txt"
 
@@ -114,7 +155,7 @@ def validate_inputs(args: argparse.Namespace) -> tuple[Path, Path, Path]:
     if not eval_gt_path.is_file():
         raise FileNotFoundError(f"Evaluation ground truth not found: {eval_gt_path}")
 
-    return ostrack_root, clean_otb_root, eval_otb_root
+    return ostrack_root, clean_otb_root, eval_otb_root, checkpoint
 
 
 def current_otb_target(otb_link: Path) -> Path | None:
@@ -276,6 +317,17 @@ def main() -> int:
     if args.overwrite_existing:
         args.skip_existing = False
 
+    ostrack_root, clean_otb_root, eval_otb_root, checkpoint = validate_inputs(args)
+    run_dir = output_run_dir(args)
+    if args.check_only:
+        print(f"OSTrack root: {ostrack_root}")
+        print(f"Clean OTB root: {clean_otb_root}")
+        print(f"Evaluation OTB root: {eval_otb_root}")
+        print(f"Expected checkpoint: {checkpoint}")
+        print(f"Checkpoint exists: {checkpoint.is_file()}")
+        print(f"Output directory: {run_dir}")
+        return 0
+
     experiment_key = experiment_key_from_values(
         args.tracker,
         args.config,
@@ -296,8 +348,6 @@ def main() -> int:
             "Matching result row already exists. Use --skip_existing to skip or "
             "--overwrite_existing to replace it."
         )
-
-    ostrack_root, clean_otb_root, eval_otb_root = validate_inputs(args)
 
     otb_link = ostrack_root / "data" / "otb"
     previous_target = current_otb_target(otb_link)
@@ -325,13 +375,6 @@ def main() -> int:
         if not time_path.is_file():
             raise FileNotFoundError(f"OSTrack time file not found: {time_path}")
 
-        run_dir = (
-            args.output_dir
-            / args.tracker
-            / args.config
-            / args.sequence
-            / f"{args.degradation}_{args.severity}_seed{args.seed}"
-        )
         run_dir.mkdir(parents=True, exist_ok=True)
         copied_result = run_dir / result_path.name
         copied_time = run_dir / time_path.name
