@@ -139,6 +139,16 @@ conda run -n ostrack python lib/train/run_training.py \
 
 This command uses the LaSOT-only debug config's 1 epoch and 100 training samples. It is still real training, so it was not run during setup.
 
+## Debug Evaluation Checkpoint Epoch
+
+The LaSOT-only debug config trains for 1 epoch, so its test epoch is also set to:
+
+`TEST.EPOCH: 1`
+
+Evaluation should therefore load:
+
+`external/OSTrack/output/checkpoints/train/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_lasot_debug/OSTrack_ep0001.pth.tar`
+
 ## Postponed
 
 The following are intentionally not included yet:
