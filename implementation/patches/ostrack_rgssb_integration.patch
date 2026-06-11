@@ -2522,6 +2522,243 @@ index b581748..869687e 100644
 +    else:
 +        raise ValueError("Unsupported scheduler")
 +    return optimizer, lr_scheduler
+diff --git a/lib/config/ostrack/config.py b/lib/config/ostrack/config.py
+--- a/lib/config/ostrack/config.py
++++ b/lib/config/ostrack/config.py
+@@
+ cfg.TRAIN.FEATURE_CONSISTENCY.LOSS = "l1"
+ cfg.TRAIN.FEATURE_CONSISTENCY.NORMALIZE = True
+ cfg.TRAIN.FEATURE_CONSISTENCY.DETACH_CLEAN = True
++cfg.TRAIN.RESPONSE_CONSISTENCY = edict()
++cfg.TRAIN.RESPONSE_CONSISTENCY.ENABLE = False
++cfg.TRAIN.RESPONSE_CONSISTENCY.WEIGHT = 0.0
++cfg.TRAIN.RESPONSE_CONSISTENCY.LOSS = "mse"
++cfg.TRAIN.RESPONSE_CONSISTENCY.DETACH_CLEAN = True
+ cfg.TRAIN.PRINT_INTERVAL = 50
+diff --git a/lib/train/base_functions.py b/lib/train/base_functions.py
+--- a/lib/train/base_functions.py
++++ b/lib/train/base_functions.py
+@@
+                                                        degradation_cfg=cfg.DATA.DEGRADATION,
+                                                        feature_consistency_cfg=cfg.TRAIN.FEATURE_CONSISTENCY,
++                                                       response_consistency_cfg=cfg.TRAIN.RESPONSE_CONSISTENCY,
+                                                        settings=settings)
+@@
+                                                      joint_transform=transform_joint,
+                                                      feature_consistency_cfg=cfg.TRAIN.FEATURE_CONSISTENCY,
++                                                     response_consistency_cfg=cfg.TRAIN.RESPONSE_CONSISTENCY,
+                                                      settings=settings)
+diff --git a/lib/train/data/processing.py b/lib/train/data/processing.py
+--- a/lib/train/data/processing.py
++++ b/lib/train/data/processing.py
+@@
+-    def __init__(self, search_area_factor, output_sz, center_jitter_factor, scale_jitter_factor,
+-                 mode='pair', settings=None, degradation_cfg=None, feature_consistency_cfg=None, *args, **kwargs):
++    def __init__(self, search_area_factor, output_sz, center_jitter_factor, scale_jitter_factor,
++                 mode='pair', settings=None, degradation_cfg=None, feature_consistency_cfg=None,
++                 response_consistency_cfg=None, *args, **kwargs):
+@@
+         self.feature_consistency_enabled = bool(
+             getattr(feature_consistency_cfg, "ENABLE", False)
+         ) if feature_consistency_cfg is not None else False
++        self.response_consistency_enabled = bool(
++            getattr(response_consistency_cfg, "ENABLE", False)
++        ) if response_consistency_cfg is not None else False
++        self.clean_search_enabled = self.feature_consistency_enabled or self.response_consistency_enabled
+@@
+-            if self.feature_consistency_enabled and s == 'search':
++            if self.clean_search_enabled and s == 'search':
+                 clean_search_crops = [crop.copy() for crop in crops]
+diff --git a/lib/train/actors/ostrack.py b/lib/train/actors/ostrack.py
+--- a/lib/train/actors/ostrack.py
++++ b/lib/train/actors/ostrack.py
+@@
+         self.feature_consistency_enabled = bool(
+             getattr(self.feature_consistency_cfg, "ENABLE", False)
+         ) if self.feature_consistency_cfg is not None else False
++        self.response_consistency_cfg = getattr(cfg.TRAIN, "RESPONSE_CONSISTENCY", None) if cfg is not None else None
++        self.response_consistency_enabled = bool(
++            getattr(self.response_consistency_cfg, "ENABLE", False)
++        ) if self.response_consistency_cfg is not None else False
++        self.clean_branch_enabled = self.feature_consistency_enabled or self.response_consistency_enabled
+@@
+-        if self.feature_consistency_enabled:
++        if self.clean_branch_enabled:
+             if 'search_images_clean' not in data:
+                 available_keys = sorted(list(data.keys())) if hasattr(data, "keys") else []
+                 raise KeyError(
+-                    "Feature consistency requires data['search_images_clean']. "
++                    "Clean/degraded consistency requires data['search_images_clean']. "
+                     "Available data keys: {}".format(available_keys)
+                 )
+@@
+-                                         return_search_features=True)
++                                         return_search_features=self.feature_consistency_enabled)
+@@
+-                                     return_search_features=True)
+-            out_dict['search_feat_rgssb_clean'] = clean_out['search_feat_rgssb']
++                                     return_search_features=self.feature_consistency_enabled)
++            if self.feature_consistency_enabled:
++                out_dict['search_feat_rgssb_clean'] = clean_out['search_feat_rgssb']
++            if self.response_consistency_enabled:
++                if 'score_map' not in clean_out:
++                    available_keys = sorted(list(clean_out.keys()))
++                    raise KeyError(
++                        "Response consistency requires clean_out['score_map']. "
++                        "Available output keys: {}".format(available_keys)
++                    )
++                out_dict['score_map_clean'] = clean_out['score_map']
+@@
+         if self.feature_consistency_enabled:
+             feature_loss = self.compute_feature_consistency_loss(pred_dict)
+             loss = loss + float(self.feature_consistency_cfg.WEIGHT) * feature_loss
++        response_loss = None
++        if self.response_consistency_enabled:
++            response_loss = self.compute_response_consistency_loss(pred_dict)
++            loss = loss + float(self.response_consistency_cfg.WEIGHT) * response_loss
+@@
+             if feature_loss is not None:
+                 status["Loss/feature_consistency"] = feature_loss.item()
++            if response_loss is not None:
++                status["Loss/response_consistency"] = response_loss.item()
+             return loss, status
+@@
+         if not torch.isfinite(feature_loss):
+             raise ValueError("Feature consistency loss is not finite.")
+         return feature_loss
++
++    def compute_response_consistency_loss(self, pred_dict):
++        if 'score_map' not in pred_dict:
++            available_keys = sorted(list(pred_dict.keys()))
++            raise KeyError(
++                "Response consistency requires pred_dict['score_map']. "
++                "Available output keys: {}".format(available_keys)
++            )
++        if 'score_map_clean' not in pred_dict:
++            available_keys = sorted(list(pred_dict.keys()))
++            raise KeyError(
++                "Response consistency requires pred_dict['score_map_clean']. "
++                "Available output keys: {}".format(available_keys)
++            )
++        degraded_response = pred_dict['score_map']
++        clean_response = pred_dict['score_map_clean']
++        if bool(getattr(self.response_consistency_cfg, "DETACH_CLEAN", True)):
++            clean_response = clean_response.detach()
++        loss_type = str(getattr(self.response_consistency_cfg, "LOSS", "mse")).lower()
++        if loss_type == "mse":
++            response_loss = F.mse_loss(degraded_response, clean_response)
++        elif loss_type == "l1":
++            response_loss = F.l1_loss(degraded_response, clean_response)
++        else:
++            raise ValueError("Unsupported TRAIN.RESPONSE_CONSISTENCY.LOSS: {}".format(loss_type))
++        if not torch.isfinite(response_loss):
++            raise ValueError("Response consistency loss is not finite.")
++        return response_loss
+diff --git a/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_3000_featcons_lam002_respcons_debug.yaml b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_3000_featcons_lam002_respcons_debug.yaml
+new file mode 100644
+index 0000000..0000000
+--- /dev/null
++++ b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_3000_featcons_lam002_respcons_debug.yaml
+@@ -0,0 +1,99 @@
++# Debug-only RG-SSB + head training config with feature and response consistency.
++# Backbone remains frozen. Architecture is unchanged.
++DATA:
++  MAX_SAMPLE_INTERVAL: 200
++  MEAN:
++  - 0.485
++  - 0.456
++  - 0.406
++  SEARCH:
++    CENTER_JITTER: 3
++    FACTOR: 4.0
++    SCALE_JITTER: 0.25
++    SIZE: 256
++    NUMBER: 1
++  STD:
++  - 0.229
++  - 0.224
++  - 0.225
++  TEMPLATE:
++    CENTER_JITTER: 0
++    FACTOR: 2.0
++    SCALE_JITTER: 0
++    SIZE: 128
++  TRAIN:
++    DATASETS_NAME:
++    - LASOT
++    DATASETS_RATIO:
++    - 1
++    SAMPLE_PER_EPOCH: 3000
++  VAL:
++    DATASETS_NAME:
++    - LASOT
++    DATASETS_RATIO:
++    - 1
++    SAMPLE_PER_EPOCH: 300
++  DEGRADATION:
++    ENABLE: True
++    PROBABILITY: 1.0
++    APPLY_TO: "search_only"
++    TYPES:
++    - motion_blur
++    - low_resolution
++    - gaussian_noise
++    SEVERITY: "medium"
++    SEED: 42
++MODEL:
++  PRETRAIN_FILE: "output/checkpoints/train/ostrack/vitb_256_mae_ce_32x4_ep300/OSTrack_ep0300.pth.tar"
++  EXTRA_MERGER: False
++  RETURN_INTER: False
++  BACKBONE:
++    TYPE: vit_base_patch16_224_ce
++    STRIDE: 16
++    CE_LOC: [3, 6, 9]
++    CE_KEEP_RATIO: [0.7, 0.7, 0.7]
++    CE_TEMPLATE_RANGE: 'CTR_POINT'
++  HEAD:
++    TYPE: CENTER
++    NUM_CHANNELS: 256
++  RGSSB:
++    ENABLE: True
++TRAIN:
++  BACKBONE_MULTIPLIER: 0.1
++  DROP_PATH_RATE: 0.1
++  CE_START_EPOCH: 20
++  CE_WARM_EPOCH: 80
++  BATCH_SIZE: 1
++  EPOCH: 1
++  GIOU_WEIGHT: 2.0
++  L1_WEIGHT: 5.0
++  GRAD_CLIP_NORM: 0.1
++  LR: 0.0001
++  LR_DROP_EPOCH: 1
++  NUM_WORKER: 2
++  OPTIMIZER: ADAMW
++  PRINT_INTERVAL: 5
++  FREEZE_MODE: "rgssb_head"
++  FEATURE_CONSISTENCY:
++    ENABLE: True
++    WEIGHT: 0.02
++    LOSS: "l1"
++    NORMALIZE: True
++    DETACH_CLEAN: True
++  RESPONSE_CONSISTENCY:
++    ENABLE: True
++    WEIGHT: 0.05
++    LOSS: "mse"
++    DETACH_CLEAN: True
++  SCHEDULER:
++    TYPE: step
++    DECAY_RATE: 0.1
++  VAL_EPOCH_INTERVAL: 1
++  WEIGHT_DECAY: 0.0001
++  AMP: False
++TEST:
++  EPOCH: 1
++  SEARCH_FACTOR: 4.0
++  SEARCH_SIZE: 256
++  TEMPLATE_FACTOR: 2.0
++  TEMPLATE_SIZE: 128
 diff --git a/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_3000_featcons_lam002_debug.yaml b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_3000_featcons_lam002_debug.yaml
 new file mode 100644
 index 0000000..0000000
