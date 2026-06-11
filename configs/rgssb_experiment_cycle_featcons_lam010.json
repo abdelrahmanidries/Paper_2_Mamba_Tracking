@@ -1,0 +1,19 @@
+{
+  "cycle_name": "featcons_lam010_3000_cycle",
+  "config_name": "vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_3000_featcons_lam010_debug",
+  "ostrack_root": "external/OSTrack",
+  "clean_otb_root": "/media/abdel/4484139E5D690B76/otb",
+  "output_root": "datasets/tiny_sot/degraded",
+  "results_csv": "experiments/baseline_results.csv",
+  "conda_env": "ostrack",
+  "train": true,
+  "eval": true,
+  "overwrite_existing": true,
+  "sequences": ["Car1", "David2", "Coke"],
+  "conditions": [
+    {"degradation": "clean", "severity": "none", "seed": 0},
+    {"degradation": "motion_blur", "severity": "medium", "seed": 42},
+    {"degradation": "low_resolution", "severity": "medium", "seed": 42},
+    {"degradation": "gaussian_noise", "severity": "medium", "seed": 42}
+  ]
+}
