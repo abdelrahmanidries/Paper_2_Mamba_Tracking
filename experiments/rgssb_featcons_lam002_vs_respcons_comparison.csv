@@ -1,0 +1,21 @@
+sequence,condition,degradation,severity,seed,baseline_auc,feature_only_auc,feature_response_auc,feature_only_vs_baseline_auc_change,feature_response_vs_baseline_auc_change,response_consistency_gain_over_feature_only_auc,feature_only_precision_20,feature_response_precision_20,precision_20_change_from_response_consistency,feature_only_mean_center_error,feature_response_mean_center_error,center_error_change_from_response_consistency,best_model,note
+Car1,clean,clean,none,0,0.575995,0.583557,0.574277,+0.007562,-0.001718,-0.009280,0.746078,0.727451,-0.018627,16.424854,17.445852,+1.020998,feature_only,response consistency hurts; feature-only remains best
+Car1,motion_blur_medium,motion_blur,medium,42,0.157212,0.167084,0.189876,+0.009872,+0.032664,+0.022792,0.196078,0.241176,+0.045098,82.399231,75.017456,-7.381775,feature_response,response consistency improves feature-only and is best for this pair
+Car1,low_resolution_medium,low_resolution,medium,42,0.214881,0.231528,0.208649,+0.016647,-0.006232,-0.022879,0.284314,0.247059,-0.037255,53.292439,68.852760,+15.560321,feature_only,response consistency hurts; feature-only remains best
+Car1,gaussian_noise_medium,gaussian_noise,medium,42,0.207270,0.465211,0.244652,+0.257941,+0.037382,-0.220559,0.613725,0.294118,-0.319607,25.541130,60.663136,+35.122006,feature_only,response consistency hurts; feature-only remains best
+David2,clean,clean,none,0,0.794439,0.786880,0.782953,-0.007559,-0.011486,-0.003927,1.000000,1.000000,+0.000000,1.653213,1.699701,+0.046488,baseline,response consistency hurts feature-only
+David2,motion_blur_medium,motion_blur,medium,42,0.549680,0.538931,0.534783,-0.010749,-0.014897,-0.004148,0.945996,0.944134,-0.001862,8.545233,8.737689,+0.192456,baseline,response consistency hurts feature-only
+David2,low_resolution_medium,low_resolution,medium,42,0.806258,0.792485,0.791563,-0.013773,-0.014695,-0.000922,1.000000,1.000000,+0.000000,1.599949,1.635631,+0.035682,baseline,response consistency hurts feature-only
+David2,gaussian_noise_medium,gaussian_noise,medium,42,0.817542,0.768110,0.777329,-0.049432,-0.040213,+0.009219,0.975791,0.990689,+0.014898,3.085201,2.580783,-0.504418,baseline,response consistency improves feature-only but baseline remains stronger
+Coke,clean,clean,none,0,0.758259,0.768671,0.768977,+0.010412,+0.010718,+0.000306,0.955326,0.955326,+0.000000,6.295847,6.335203,+0.039356,feature_response,response consistency improves feature-only and is best for this pair
+Coke,motion_blur_medium,motion_blur,medium,42,0.700384,0.727366,0.726379,+0.026982,+0.025995,-0.000987,0.934708,0.938144,+0.003436,7.894889,7.844747,-0.050142,feature_only,response consistency hurts; feature-only remains best
+Coke,low_resolution_medium,low_resolution,medium,42,0.745875,0.760777,0.758566,+0.014902,+0.012691,-0.002211,0.951890,0.951890,+0.000000,6.767758,6.923800,+0.156042,feature_only,response consistency hurts; feature-only remains best
+Coke,gaussian_noise_medium,gaussian_noise,medium,42,0.746759,0.765711,0.765983,+0.018952,+0.019224,+0.000272,0.938144,0.951890,+0.013746,6.455208,6.539138,+0.083930,feature_response,response consistency improves feature-only and is best for this pair
+,,,,,,,,,,,,,,,,,,
+AVERAGES_BY_CONDITION,,,,,,,,,,,,,,,,,,
+AVERAGE,clean,,,,0.709564,0.713036,0.708736,+0.003472,-0.000829,-0.004300,,,-0.006209,,,+0.368947,,response consistency hurts this condition on average
+AVERAGE,motion_blur_medium,,,,0.469092,0.477794,0.483679,+0.008702,+0.014587,+0.005886,,,+0.015557,,,-2.413154,,response consistency helps this condition on average
+AVERAGE,low_resolution_medium,,,,0.589005,0.594930,0.586259,+0.005925,-0.002745,-0.008671,,,-0.012418,,,+5.250682,,response consistency hurts this condition on average
+AVERAGE,gaussian_noise_medium,,,,0.590524,0.666344,0.595988,+0.075820,+0.005464,-0.070356,,,-0.096988,,,+11.567173,,response consistency hurts this condition on average
+,,,,,,,,,,,,,,,,,,
+OVERALL_AVERAGE,all_12_pairs,,,,0.589546,0.613026,0.593666,,,-0.019360,,,,,,,,
