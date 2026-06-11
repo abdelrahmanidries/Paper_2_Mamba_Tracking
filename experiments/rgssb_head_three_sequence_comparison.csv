@@ -1,0 +1,13 @@
+sequence,condition,degradation,severity,seed,status,baseline_auc,rgssb_head_auc,auc_change,baseline_precision_20,rgssb_head_precision_20,precision_20_change,baseline_mean_center_error,rgssb_head_mean_center_error,center_error_change,baseline_mean_iou,rgssb_head_mean_iou,mean_iou_change,baseline_frames,rgssb_head_frames,note
+Car1,clean,clean,none,0,ok,0.575995,0.749728,0.173733,0.746078,0.983333,0.237255,16.455626,2.481011,-13.974615,0.575457,0.752178,0.176721,1020,1020,improved across AUC/precision/center error
+Car1,motion_blur medium,motion_blur,medium,42,ok,0.157212,0.163638,0.006426,0.198039,0.212745,0.014706,82.957024,76.467148,-6.489876,0.150176,0.156940,0.006764,1020,1020,improved across AUC/precision/center error
+Car1,low_resolution medium,low_resolution,medium,42,ok,0.214881,0.229247,0.014366,0.267647,0.291176,0.023529,55.176579,58.656204,3.479625,0.208387,0.223063,0.014676,1020,1020,improved by AUC
+Car1,gaussian_noise medium,gaussian_noise,medium,42,ok,0.207270,0.245312,0.038042,0.250980,0.322549,0.071569,64.898727,56.320698,-8.578029,0.200663,0.239326,0.038663,1020,1020,improved across AUC/precision/center error
+David2,clean,clean,none,0,ok,0.794439,0.774656,-0.019783,1.000000,1.000000,0.000000,1.541015,1.598602,0.057587,0.796766,0.776996,-0.019770,537,537,worse by AUC
+David2,motion_blur medium,motion_blur,medium,42,ok,0.549680,0.576562,0.026882,0.970205,0.972067,0.001862,8.078309,7.100600,-0.977709,0.550032,0.577478,0.027446,537,537,improved across AUC/precision/center error
+David2,low_resolution medium,low_resolution,medium,42,ok,0.806258,0.782916,-0.023342,1.000000,1.000000,0.000000,1.516361,1.564069,0.047708,0.809038,0.785321,-0.023717,537,537,worse by AUC
+David2,gaussian_noise medium,gaussian_noise,medium,42,ok,0.817542,0.770821,-0.046721,1.000000,0.981378,-0.018622,1.885668,2.604729,0.719061,0.820530,0.773381,-0.047149,537,537,worse by AUC
+Coke,clean,clean,none,0,ok,0.758259,0.769079,0.010820,0.958763,0.955326,-0.003437,5.797408,6.712822,0.915414,0.761059,0.771453,0.010394,291,291,improved by AUC
+Coke,motion_blur medium,motion_blur,medium,42,ok,0.700384,0.730087,0.029703,0.945017,0.927835,-0.017182,7.648194,8.236345,0.588151,0.702562,0.732020,0.029458,291,291,improved by AUC
+Coke,low_resolution medium,low_resolution,medium,42,ok,0.745875,0.761049,0.015174,0.945017,0.945017,0.000000,6.493616,7.042820,0.549204,0.748114,0.763526,0.015412,291,291,improved by AUC
+Coke,gaussian_noise medium,gaussian_noise,medium,42,ok,0.746759,0.771188,0.024429,0.951890,0.945017,-0.006873,6.327523,6.287181,-0.040342,0.749059,0.774176,0.025117,291,291,improved by AUC
