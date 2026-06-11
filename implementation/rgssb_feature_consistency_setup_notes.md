@@ -10,6 +10,24 @@ New debug config:
 
 `external/OSTrack/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_3000_featcons_debug.yaml`
 
+## Dataloader Crash Fix
+
+Observed crash:
+
+```text
+KeyError: "Feature consistency requires data['search_images_clean']."
+```
+
+Root cause:
+
+The initial verifier manually exercised `STARKProcessing`, but it did not test the real `build_dataloaders` path. The train processing path preserved `search_images_clean`, but the validation processing path did not receive `cfg.TRAIN.FEATURE_CONSISTENCY`. Since OSTrack uses the same actor for train and validation, validation batches also need `search_images_clean` whenever feature consistency is enabled.
+
+Fix:
+
+- `external/OSTrack/lib/train/base_functions.py` now passes `feature_consistency_cfg=cfg.TRAIN.FEATURE_CONSISTENCY` to both train and validation `STARKProcessing`.
+- `external/OSTrack/lib/train/actors/ostrack.py` keeps the hard failure when the key is missing, but now prints the available batch keys in the error message.
+- `scripts/verify_rgssb_feature_consistency_real_loader.py` verifies both train and validation loader batches contain `search_images_clean`.
+
 ## Why Feature Consistency Was Added
 
 The fully degraded 3000-sample RG-SSB + head setup was stronger than the balanced 3000-sample setup overall, but results remained mixed. Feature consistency adds a direct clean-degraded alignment signal without adding new modules.
@@ -99,6 +117,22 @@ The verifier checks:
 - one mini forward/backward works;
 - feature consistency loss is finite;
 - post-RGSSB feature shape is `[1, 256, 768]`.
+
+## Real-Loader Verification Command
+
+```bash
+conda run -n ostrack python scripts/verify_rgssb_feature_consistency_real_loader.py
+```
+
+This verifier checks:
+
+- the actual `build_dataloaders` path;
+- train batch keys;
+- validation batch keys;
+- `search_images_clean` in both train and validation batches;
+- shape compatibility between `search_images` and `search_images_clean`;
+- one real-batch forward/backward through `OSTrackActor`;
+- finite feature consistency loss.
 
 ## Training Smoke Test Command
 
