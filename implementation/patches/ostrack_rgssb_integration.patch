@@ -1,3 +1,1251 @@
+diff --git a/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_debug.yaml b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_debug.yaml
+new file mode 100644
+index 0000000..cc1bd10
+--- /dev/null
++++ b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_debug.yaml
+@@ -0,0 +1,88 @@
++DATA:
++  MAX_SAMPLE_INTERVAL: 200
++  MEAN:
++  - 0.485
++  - 0.456
++  - 0.406
++  SEARCH:
++    CENTER_JITTER: 3
++    FACTOR: 4.0
++    SCALE_JITTER: 0.25
++    SIZE: 256
++    NUMBER: 1
++  STD:
++  - 0.229
++  - 0.224
++  - 0.225
++  TEMPLATE:
++    CENTER_JITTER: 0
++    FACTOR: 2.0
++    SCALE_JITTER: 0
++    SIZE: 128
++#  TRAIN:
++#    DATASETS_NAME:
++#      - GOT10K_train_full
++#    DATASETS_RATIO:
++#      - 1
++#    SAMPLE_PER_EPOCH: 60000
++
++  TRAIN:
++    DATASETS_NAME:
++    - LASOT
++    - GOT10K_vottrain
++    - COCO17
++    - TRACKINGNET
++    DATASETS_RATIO:
++    - 1
++    - 1
++    - 1
++    - 1
++    SAMPLE_PER_EPOCH: 60000
++  VAL:
++    DATASETS_NAME:
++    - GOT10K_votval
++    DATASETS_RATIO:
++    - 1
++    SAMPLE_PER_EPOCH: 10000
++MODEL:
++  PRETRAIN_FILE: "mae_pretrain_vit_base.pth"
++  EXTRA_MERGER: False
++  RETURN_INTER: False
++  BACKBONE:
++    TYPE: vit_base_patch16_224_ce
++    STRIDE: 16
++    CE_LOC: [3, 6, 9]
++    CE_KEEP_RATIO: [0.7, 0.7, 0.7]
++    CE_TEMPLATE_RANGE: 'CTR_POINT'  # choose between ALL, CTR_POINT, CTR_REC, GT_BOX
++  HEAD:
++    TYPE: CENTER
++    NUM_CHANNELS: 256
++  RGSSB:
++    ENABLE: True
++TRAIN:
++  BACKBONE_MULTIPLIER: 0.1
++  DROP_PATH_RATE: 0.1
++  CE_START_EPOCH: 20  # candidate elimination start epoch
++  CE_WARM_EPOCH: 80  # candidate elimination warm up epoch
++  BATCH_SIZE: 32
++  EPOCH: 300
++  GIOU_WEIGHT: 2.0
++  L1_WEIGHT: 5.0
++  GRAD_CLIP_NORM: 0.1
++  LR: 0.0004
++  LR_DROP_EPOCH: 240
++  NUM_WORKER: 10
++  OPTIMIZER: ADAMW
++  PRINT_INTERVAL: 50
++  SCHEDULER:
++    TYPE: step
++    DECAY_RATE: 0.1
++  VAL_EPOCH_INTERVAL: 20
++  WEIGHT_DECAY: 0.0001
++  AMP: False
++TEST:
++  EPOCH: 300
++  SEARCH_FACTOR: 4.0
++  SEARCH_SIZE: 256
++  TEMPLATE_FACTOR: 2.0
++  TEMPLATE_SIZE: 128
+diff --git a/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_balanced_3000_debug.yaml b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_balanced_3000_debug.yaml
+new file mode 100644
+index 0000000..4b096c7
+--- /dev/null
++++ b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_balanced_3000_debug.yaml
+@@ -0,0 +1,88 @@
++# Debug-only RG-SSB + head training config using verified local LaSOT and balanced clean/degraded samples.
++# Backbone remains frozen. DATA.DEGRADATION.PROBABILITY=0.5 mixes clean and degraded search crops.
++DATA:
++  MAX_SAMPLE_INTERVAL: 200
++  MEAN:
++  - 0.485
++  - 0.456
++  - 0.406
++  SEARCH:
++    CENTER_JITTER: 3
++    FACTOR: 4.0
++    SCALE_JITTER: 0.25
++    SIZE: 256
++    NUMBER: 1
++  STD:
++  - 0.229
++  - 0.224
++  - 0.225
++  TEMPLATE:
++    CENTER_JITTER: 0
++    FACTOR: 2.0
++    SCALE_JITTER: 0
++    SIZE: 128
++  TRAIN:
++    DATASETS_NAME:
++    - LASOT
++    DATASETS_RATIO:
++    - 1
++    SAMPLE_PER_EPOCH: 3000
++  VAL:
++    DATASETS_NAME:
++    - LASOT
++    DATASETS_RATIO:
++    - 1
++    SAMPLE_PER_EPOCH: 300
++  DEGRADATION:
++    ENABLE: True
++    PROBABILITY: 0.5
++    APPLY_TO: "search_only"
++    TYPES:
++    - motion_blur
++    - low_resolution
++    - gaussian_noise
++    SEVERITY: "medium"
++    SEED: 42
++MODEL:
++  PRETRAIN_FILE: "output/checkpoints/train/ostrack/vitb_256_mae_ce_32x4_ep300/OSTrack_ep0300.pth.tar"
++  EXTRA_MERGER: False
++  RETURN_INTER: False
++  BACKBONE:
++    TYPE: vit_base_patch16_224_ce
++    STRIDE: 16
++    CE_LOC: [3, 6, 9]
++    CE_KEEP_RATIO: [0.7, 0.7, 0.7]
++    CE_TEMPLATE_RANGE: 'CTR_POINT'
++  HEAD:
++    TYPE: CENTER
++    NUM_CHANNELS: 256
++  RGSSB:
++    ENABLE: True
++TRAIN:
++  BACKBONE_MULTIPLIER: 0.1
++  DROP_PATH_RATE: 0.1
++  CE_START_EPOCH: 20
++  CE_WARM_EPOCH: 80
++  BATCH_SIZE: 1
++  EPOCH: 1
++  GIOU_WEIGHT: 2.0
++  L1_WEIGHT: 5.0
++  GRAD_CLIP_NORM: 0.1
++  LR: 0.0001
++  LR_DROP_EPOCH: 1
++  NUM_WORKER: 2
++  OPTIMIZER: ADAMW
++  PRINT_INTERVAL: 5
++  FREEZE_MODE: "rgssb_head"
++  SCHEDULER:
++    TYPE: step
++    DECAY_RATE: 0.1
++  VAL_EPOCH_INTERVAL: 1
++  WEIGHT_DECAY: 0.0001
++  AMP: False
++TEST:
++  EPOCH: 1
++  SEARCH_FACTOR: 4.0
++  SEARCH_SIZE: 256
++  TEMPLATE_FACTOR: 2.0
++  TEMPLATE_SIZE: 128
+diff --git a/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_1000_debug.yaml b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_1000_debug.yaml
+new file mode 100644
+index 0000000..1d3fc87
+--- /dev/null
++++ b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_1000_debug.yaml
+@@ -0,0 +1,88 @@
++# Debug-only RG-SSB + head training config using verified local LaSOT and 1000 synthetic degraded samples.
++# Backbone remains frozen. This is intentionally local/debug scale.
++DATA:
++  MAX_SAMPLE_INTERVAL: 200
++  MEAN:
++  - 0.485
++  - 0.456
++  - 0.406
++  SEARCH:
++    CENTER_JITTER: 3
++    FACTOR: 4.0
++    SCALE_JITTER: 0.25
++    SIZE: 256
++    NUMBER: 1
++  STD:
++  - 0.229
++  - 0.224
++  - 0.225
++  TEMPLATE:
++    CENTER_JITTER: 0
++    FACTOR: 2.0
++    SCALE_JITTER: 0
++    SIZE: 128
++  TRAIN:
++    DATASETS_NAME:
++    - LASOT
++    DATASETS_RATIO:
++    - 1
++    SAMPLE_PER_EPOCH: 1000
++  VAL:
++    DATASETS_NAME:
++    - LASOT
++    DATASETS_RATIO:
++    - 1
++    SAMPLE_PER_EPOCH: 100
++  DEGRADATION:
++    ENABLE: True
++    PROBABILITY: 1.0
++    APPLY_TO: "search_only"
++    TYPES:
++    - motion_blur
++    - low_resolution
++    - gaussian_noise
++    SEVERITY: "medium"
++    SEED: 42
++MODEL:
++  PRETRAIN_FILE: "output/checkpoints/train/ostrack/vitb_256_mae_ce_32x4_ep300/OSTrack_ep0300.pth.tar"
++  EXTRA_MERGER: False
++  RETURN_INTER: False
++  BACKBONE:
++    TYPE: vit_base_patch16_224_ce
++    STRIDE: 16
++    CE_LOC: [3, 6, 9]
++    CE_KEEP_RATIO: [0.7, 0.7, 0.7]
++    CE_TEMPLATE_RANGE: 'CTR_POINT'
++  HEAD:
++    TYPE: CENTER
++    NUM_CHANNELS: 256
++  RGSSB:
++    ENABLE: True
++TRAIN:
++  BACKBONE_MULTIPLIER: 0.1
++  DROP_PATH_RATE: 0.1
++  CE_START_EPOCH: 20
++  CE_WARM_EPOCH: 80
++  BATCH_SIZE: 1
++  EPOCH: 1
++  GIOU_WEIGHT: 2.0
++  L1_WEIGHT: 5.0
++  GRAD_CLIP_NORM: 0.1
++  LR: 0.0001
++  LR_DROP_EPOCH: 1
++  NUM_WORKER: 2
++  OPTIMIZER: ADAMW
++  PRINT_INTERVAL: 5
++  FREEZE_MODE: "rgssb_head"
++  SCHEDULER:
++    TYPE: step
++    DECAY_RATE: 0.1
++  VAL_EPOCH_INTERVAL: 1
++  WEIGHT_DECAY: 0.0001
++  AMP: False
++TEST:
++  EPOCH: 1
++  SEARCH_FACTOR: 4.0
++  SEARCH_SIZE: 256
++  TEMPLATE_FACTOR: 2.0
++  TEMPLATE_SIZE: 128
+diff --git a/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_3000_debug.yaml b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_3000_debug.yaml
+new file mode 100644
+index 0000000..10cb549
+--- /dev/null
++++ b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_3000_debug.yaml
+@@ -0,0 +1,88 @@
++# Debug-only RG-SSB + head training config using verified local LaSOT and 3000 synthetic degraded samples.
++# Backbone remains frozen. This scales the 1000-sample local debug setup without adding new modules or losses.
++DATA:
++  MAX_SAMPLE_INTERVAL: 200
++  MEAN:
++  - 0.485
++  - 0.456
++  - 0.406
++  SEARCH:
++    CENTER_JITTER: 3
++    FACTOR: 4.0
++    SCALE_JITTER: 0.25
++    SIZE: 256
++    NUMBER: 1
++  STD:
++  - 0.229
++  - 0.224
++  - 0.225
++  TEMPLATE:
++    CENTER_JITTER: 0
++    FACTOR: 2.0
++    SCALE_JITTER: 0
++    SIZE: 128
++  TRAIN:
++    DATASETS_NAME:
++    - LASOT
++    DATASETS_RATIO:
++    - 1
++    SAMPLE_PER_EPOCH: 3000
++  VAL:
++    DATASETS_NAME:
++    - LASOT
++    DATASETS_RATIO:
++    - 1
++    SAMPLE_PER_EPOCH: 300
++  DEGRADATION:
++    ENABLE: True
++    PROBABILITY: 1.0
++    APPLY_TO: "search_only"
++    TYPES:
++    - motion_blur
++    - low_resolution
++    - gaussian_noise
++    SEVERITY: "medium"
++    SEED: 42
++MODEL:
++  PRETRAIN_FILE: "output/checkpoints/train/ostrack/vitb_256_mae_ce_32x4_ep300/OSTrack_ep0300.pth.tar"
++  EXTRA_MERGER: False
++  RETURN_INTER: False
++  BACKBONE:
++    TYPE: vit_base_patch16_224_ce
++    STRIDE: 16
++    CE_LOC: [3, 6, 9]
++    CE_KEEP_RATIO: [0.7, 0.7, 0.7]
++    CE_TEMPLATE_RANGE: 'CTR_POINT'
++  HEAD:
++    TYPE: CENTER
++    NUM_CHANNELS: 256
++  RGSSB:
++    ENABLE: True
++TRAIN:
++  BACKBONE_MULTIPLIER: 0.1
++  DROP_PATH_RATE: 0.1
++  CE_START_EPOCH: 20
++  CE_WARM_EPOCH: 80
++  BATCH_SIZE: 1
++  EPOCH: 1
++  GIOU_WEIGHT: 2.0
++  L1_WEIGHT: 5.0
++  GRAD_CLIP_NORM: 0.1
++  LR: 0.0001
++  LR_DROP_EPOCH: 1
++  NUM_WORKER: 2
++  OPTIMIZER: ADAMW
++  PRINT_INTERVAL: 5
++  FREEZE_MODE: "rgssb_head"
++  SCHEDULER:
++    TYPE: step
++    DECAY_RATE: 0.1
++  VAL_EPOCH_INTERVAL: 1
++  WEIGHT_DECAY: 0.0001
++  AMP: False
++TEST:
++  EPOCH: 1
++  SEARCH_FACTOR: 4.0
++  SEARCH_SIZE: 256
++  TEMPLATE_FACTOR: 2.0
++  TEMPLATE_SIZE: 128
+diff --git a/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_3000_featcons_debug.yaml b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_3000_featcons_debug.yaml
+new file mode 100644
+index 0000000..2273a4a
+--- /dev/null
++++ b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_3000_featcons_debug.yaml
+@@ -0,0 +1,94 @@
++# Debug-only RG-SSB + head training config with clean-degraded feature consistency.
++# Backbone remains frozen. Feature consistency compares clean/degraded post-RGSSB search tokens.
++DATA:
++  MAX_SAMPLE_INTERVAL: 200
++  MEAN:
++  - 0.485
++  - 0.456
++  - 0.406
++  SEARCH:
++    CENTER_JITTER: 3
++    FACTOR: 4.0
++    SCALE_JITTER: 0.25
++    SIZE: 256
++    NUMBER: 1
++  STD:
++  - 0.229
++  - 0.224
++  - 0.225
++  TEMPLATE:
++    CENTER_JITTER: 0
++    FACTOR: 2.0
++    SCALE_JITTER: 0
++    SIZE: 128
++  TRAIN:
++    DATASETS_NAME:
++    - LASOT
++    DATASETS_RATIO:
++    - 1
++    SAMPLE_PER_EPOCH: 3000
++  VAL:
++    DATASETS_NAME:
++    - LASOT
++    DATASETS_RATIO:
++    - 1
++    SAMPLE_PER_EPOCH: 300
++  DEGRADATION:
++    ENABLE: True
++    PROBABILITY: 1.0
++    APPLY_TO: "search_only"
++    TYPES:
++    - motion_blur
++    - low_resolution
++    - gaussian_noise
++    SEVERITY: "medium"
++    SEED: 42
++MODEL:
++  PRETRAIN_FILE: "output/checkpoints/train/ostrack/vitb_256_mae_ce_32x4_ep300/OSTrack_ep0300.pth.tar"
++  EXTRA_MERGER: False
++  RETURN_INTER: False
++  BACKBONE:
++    TYPE: vit_base_patch16_224_ce
++    STRIDE: 16
++    CE_LOC: [3, 6, 9]
++    CE_KEEP_RATIO: [0.7, 0.7, 0.7]
++    CE_TEMPLATE_RANGE: 'CTR_POINT'
++  HEAD:
++    TYPE: CENTER
++    NUM_CHANNELS: 256
++  RGSSB:
++    ENABLE: True
++TRAIN:
++  BACKBONE_MULTIPLIER: 0.1
++  DROP_PATH_RATE: 0.1
++  CE_START_EPOCH: 20
++  CE_WARM_EPOCH: 80
++  BATCH_SIZE: 1
++  EPOCH: 1
++  GIOU_WEIGHT: 2.0
++  L1_WEIGHT: 5.0
++  GRAD_CLIP_NORM: 0.1
++  LR: 0.0001
++  LR_DROP_EPOCH: 1
++  NUM_WORKER: 2
++  OPTIMIZER: ADAMW
++  PRINT_INTERVAL: 5
++  FREEZE_MODE: "rgssb_head"
++  FEATURE_CONSISTENCY:
++    ENABLE: True
++    WEIGHT: 0.05
++    LOSS: "l1"
++    NORMALIZE: True
++    DETACH_CLEAN: True
++  SCHEDULER:
++    TYPE: step
++    DECAY_RATE: 0.1
++  VAL_EPOCH_INTERVAL: 1
++  WEIGHT_DECAY: 0.0001
++  AMP: False
++TEST:
++  EPOCH: 1
++  SEARCH_FACTOR: 4.0
++  SEARCH_SIZE: 256
++  TEMPLATE_FACTOR: 2.0
++  TEMPLATE_SIZE: 128
+diff --git a/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_3000_featcons_lam002_debug.yaml b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_3000_featcons_lam002_debug.yaml
+new file mode 100644
+index 0000000..bf0757a
+--- /dev/null
++++ b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_3000_featcons_lam002_debug.yaml
+@@ -0,0 +1,94 @@
++# Debug-only RG-SSB + head training config with clean-degraded feature consistency.
++# Backbone remains frozen. Feature consistency compares clean/degraded post-RGSSB search tokens.
++DATA:
++  MAX_SAMPLE_INTERVAL: 200
++  MEAN:
++  - 0.485
++  - 0.456
++  - 0.406
++  SEARCH:
++    CENTER_JITTER: 3
++    FACTOR: 4.0
++    SCALE_JITTER: 0.25
++    SIZE: 256
++    NUMBER: 1
++  STD:
++  - 0.229
++  - 0.224
++  - 0.225
++  TEMPLATE:
++    CENTER_JITTER: 0
++    FACTOR: 2.0
++    SCALE_JITTER: 0
++    SIZE: 128
++  TRAIN:
++    DATASETS_NAME:
++    - LASOT
++    DATASETS_RATIO:
++    - 1
++    SAMPLE_PER_EPOCH: 3000
++  VAL:
++    DATASETS_NAME:
++    - LASOT
++    DATASETS_RATIO:
++    - 1
++    SAMPLE_PER_EPOCH: 300
++  DEGRADATION:
++    ENABLE: True
++    PROBABILITY: 1.0
++    APPLY_TO: "search_only"
++    TYPES:
++    - motion_blur
++    - low_resolution
++    - gaussian_noise
++    SEVERITY: "medium"
++    SEED: 42
++MODEL:
++  PRETRAIN_FILE: "output/checkpoints/train/ostrack/vitb_256_mae_ce_32x4_ep300/OSTrack_ep0300.pth.tar"
++  EXTRA_MERGER: False
++  RETURN_INTER: False
++  BACKBONE:
++    TYPE: vit_base_patch16_224_ce
++    STRIDE: 16
++    CE_LOC: [3, 6, 9]
++    CE_KEEP_RATIO: [0.7, 0.7, 0.7]
++    CE_TEMPLATE_RANGE: 'CTR_POINT'
++  HEAD:
++    TYPE: CENTER
++    NUM_CHANNELS: 256
++  RGSSB:
++    ENABLE: True
++TRAIN:
++  BACKBONE_MULTIPLIER: 0.1
++  DROP_PATH_RATE: 0.1
++  CE_START_EPOCH: 20
++  CE_WARM_EPOCH: 80
++  BATCH_SIZE: 1
++  EPOCH: 1
++  GIOU_WEIGHT: 2.0
++  L1_WEIGHT: 5.0
++  GRAD_CLIP_NORM: 0.1
++  LR: 0.0001
++  LR_DROP_EPOCH: 1
++  NUM_WORKER: 2
++  OPTIMIZER: ADAMW
++  PRINT_INTERVAL: 5
++  FREEZE_MODE: "rgssb_head"
++  FEATURE_CONSISTENCY:
++    ENABLE: True
++    WEIGHT: 0.02
++    LOSS: "l1"
++    NORMALIZE: True
++    DETACH_CLEAN: True
++  SCHEDULER:
++    TYPE: step
++    DECAY_RATE: 0.1
++  VAL_EPOCH_INTERVAL: 1
++  WEIGHT_DECAY: 0.0001
++  AMP: False
++TEST:
++  EPOCH: 1
++  SEARCH_FACTOR: 4.0
++  SEARCH_SIZE: 256
++  TEMPLATE_FACTOR: 2.0
++  TEMPLATE_SIZE: 128
+diff --git a/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_3000_featcons_lam002_respcons_debug.yaml b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_3000_featcons_lam002_respcons_debug.yaml
+new file mode 100644
+index 0000000..616e097
+--- /dev/null
++++ b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_3000_featcons_lam002_respcons_debug.yaml
+@@ -0,0 +1,99 @@
++# Debug-only RG-SSB + head training config with feature and response consistency.
++# Backbone remains frozen. Architecture is unchanged.
++DATA:
++  MAX_SAMPLE_INTERVAL: 200
++  MEAN:
++  - 0.485
++  - 0.456
++  - 0.406
++  SEARCH:
++    CENTER_JITTER: 3
++    FACTOR: 4.0
++    SCALE_JITTER: 0.25
++    SIZE: 256
++    NUMBER: 1
++  STD:
++  - 0.229
++  - 0.224
++  - 0.225
++  TEMPLATE:
++    CENTER_JITTER: 0
++    FACTOR: 2.0
++    SCALE_JITTER: 0
++    SIZE: 128
++  TRAIN:
++    DATASETS_NAME:
++    - LASOT
++    DATASETS_RATIO:
++    - 1
++    SAMPLE_PER_EPOCH: 3000
++  VAL:
++    DATASETS_NAME:
++    - LASOT
++    DATASETS_RATIO:
++    - 1
++    SAMPLE_PER_EPOCH: 300
++  DEGRADATION:
++    ENABLE: True
++    PROBABILITY: 1.0
++    APPLY_TO: "search_only"
++    TYPES:
++    - motion_blur
++    - low_resolution
++    - gaussian_noise
++    SEVERITY: "medium"
++    SEED: 42
++MODEL:
++  PRETRAIN_FILE: "output/checkpoints/train/ostrack/vitb_256_mae_ce_32x4_ep300/OSTrack_ep0300.pth.tar"
++  EXTRA_MERGER: False
++  RETURN_INTER: False
++  BACKBONE:
++    TYPE: vit_base_patch16_224_ce
++    STRIDE: 16
++    CE_LOC: [3, 6, 9]
++    CE_KEEP_RATIO: [0.7, 0.7, 0.7]
++    CE_TEMPLATE_RANGE: 'CTR_POINT'
++  HEAD:
++    TYPE: CENTER
++    NUM_CHANNELS: 256
++  RGSSB:
++    ENABLE: True
++TRAIN:
++  BACKBONE_MULTIPLIER: 0.1
++  DROP_PATH_RATE: 0.1
++  CE_START_EPOCH: 20
++  CE_WARM_EPOCH: 80
++  BATCH_SIZE: 1
++  EPOCH: 1
++  GIOU_WEIGHT: 2.0
++  L1_WEIGHT: 5.0
++  GRAD_CLIP_NORM: 0.1
++  LR: 0.0001
++  LR_DROP_EPOCH: 1
++  NUM_WORKER: 2
++  OPTIMIZER: ADAMW
++  PRINT_INTERVAL: 5
++  FREEZE_MODE: "rgssb_head"
++  FEATURE_CONSISTENCY:
++    ENABLE: True
++    WEIGHT: 0.02
++    LOSS: "l1"
++    NORMALIZE: True
++    DETACH_CLEAN: True
++  RESPONSE_CONSISTENCY:
++    ENABLE: True
++    WEIGHT: 0.05
++    LOSS: "mse"
++    DETACH_CLEAN: True
++  SCHEDULER:
++    TYPE: step
++    DECAY_RATE: 0.1
++  VAL_EPOCH_INTERVAL: 1
++  WEIGHT_DECAY: 0.0001
++  AMP: False
++TEST:
++  EPOCH: 1
++  SEARCH_FACTOR: 4.0
++  SEARCH_SIZE: 256
++  TEMPLATE_FACTOR: 2.0
++  TEMPLATE_SIZE: 128
+diff --git a/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_3000_featcons_lam010_debug.yaml b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_3000_featcons_lam010_debug.yaml
+new file mode 100644
+index 0000000..85f7907
+--- /dev/null
++++ b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_3000_featcons_lam010_debug.yaml
+@@ -0,0 +1,94 @@
++# Debug-only RG-SSB + head training config with clean-degraded feature consistency.
++# Backbone remains frozen. Feature consistency compares clean/degraded post-RGSSB search tokens.
++DATA:
++  MAX_SAMPLE_INTERVAL: 200
++  MEAN:
++  - 0.485
++  - 0.456
++  - 0.406
++  SEARCH:
++    CENTER_JITTER: 3
++    FACTOR: 4.0
++    SCALE_JITTER: 0.25
++    SIZE: 256
++    NUMBER: 1
++  STD:
++  - 0.229
++  - 0.224
++  - 0.225
++  TEMPLATE:
++    CENTER_JITTER: 0
++    FACTOR: 2.0
++    SCALE_JITTER: 0
++    SIZE: 128
++  TRAIN:
++    DATASETS_NAME:
++    - LASOT
++    DATASETS_RATIO:
++    - 1
++    SAMPLE_PER_EPOCH: 3000
++  VAL:
++    DATASETS_NAME:
++    - LASOT
++    DATASETS_RATIO:
++    - 1
++    SAMPLE_PER_EPOCH: 300
++  DEGRADATION:
++    ENABLE: True
++    PROBABILITY: 1.0
++    APPLY_TO: "search_only"
++    TYPES:
++    - motion_blur
++    - low_resolution
++    - gaussian_noise
++    SEVERITY: "medium"
++    SEED: 42
++MODEL:
++  PRETRAIN_FILE: "output/checkpoints/train/ostrack/vitb_256_mae_ce_32x4_ep300/OSTrack_ep0300.pth.tar"
++  EXTRA_MERGER: False
++  RETURN_INTER: False
++  BACKBONE:
++    TYPE: vit_base_patch16_224_ce
++    STRIDE: 16
++    CE_LOC: [3, 6, 9]
++    CE_KEEP_RATIO: [0.7, 0.7, 0.7]
++    CE_TEMPLATE_RANGE: 'CTR_POINT'
++  HEAD:
++    TYPE: CENTER
++    NUM_CHANNELS: 256
++  RGSSB:
++    ENABLE: True
++TRAIN:
++  BACKBONE_MULTIPLIER: 0.1
++  DROP_PATH_RATE: 0.1
++  CE_START_EPOCH: 20
++  CE_WARM_EPOCH: 80
++  BATCH_SIZE: 1
++  EPOCH: 1
++  GIOU_WEIGHT: 2.0
++  L1_WEIGHT: 5.0
++  GRAD_CLIP_NORM: 0.1
++  LR: 0.0001
++  LR_DROP_EPOCH: 1
++  NUM_WORKER: 2
++  OPTIMIZER: ADAMW
++  PRINT_INTERVAL: 5
++  FREEZE_MODE: "rgssb_head"
++  FEATURE_CONSISTENCY:
++    ENABLE: True
++    WEIGHT: 0.10
++    LOSS: "l1"
++    NORMALIZE: True
++    DETACH_CLEAN: True
++  SCHEDULER:
++    TYPE: step
++    DECAY_RATE: 0.1
++  VAL_EPOCH_INTERVAL: 1
++  WEIGHT_DECAY: 0.0001
++  AMP: False
++TEST:
++  EPOCH: 1
++  SEARCH_FACTOR: 4.0
++  SEARCH_SIZE: 256
++  TEMPLATE_FACTOR: 2.0
++  TEMPLATE_SIZE: 128
+diff --git a/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_hpc_featcons_lam002.yaml b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_hpc_featcons_lam002.yaml
+new file mode 100644
+index 0000000..423c884
+--- /dev/null
++++ b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_hpc_featcons_lam002.yaml
+@@ -0,0 +1,100 @@
++# HPC RG-SSB + head training config with clean-degraded feature consistency.
++# Architecture remains unchanged. Backbone remains frozen.
++# Conservative defaults below should be adjusted for actual HPC GPU memory.
++DATA:
++  MAX_SAMPLE_INTERVAL: 200
++  MEAN:
++  - 0.485
++  - 0.456
++  - 0.406
++  SEARCH:
++    CENTER_JITTER: 3
++    FACTOR: 4.0
++    SCALE_JITTER: 0.25
++    SIZE: 256
++    NUMBER: 1
++  STD:
++  - 0.229
++  - 0.224
++  - 0.225
++  TEMPLATE:
++    CENTER_JITTER: 0
++    FACTOR: 2.0
++    SCALE_JITTER: 0
++    SIZE: 128
++  TRAIN:
++    DATASETS_NAME:
++    - LASOT
++    DATASETS_RATIO:
++    - 1
++    SAMPLE_PER_EPOCH: 10000
++  VAL:
++    DATASETS_NAME:
++    - LASOT
++    DATASETS_RATIO:
++    - 1
++    SAMPLE_PER_EPOCH: 1000
++  DEGRADATION:
++    ENABLE: True
++    PROBABILITY: 1.0
++    APPLY_TO: "search_only"
++    TYPES:
++    - motion_blur
++    - low_resolution
++    - gaussian_noise
++    SEVERITY: "medium"
++    SEED: 42
++MODEL:
++  PRETRAIN_FILE: "output/checkpoints/train/ostrack/vitb_256_mae_ce_32x4_ep300/OSTrack_ep0300.pth.tar"
++  EXTRA_MERGER: False
++  RETURN_INTER: False
++  BACKBONE:
++    TYPE: vit_base_patch16_224_ce
++    STRIDE: 16
++    CE_LOC: [3, 6, 9]
++    CE_KEEP_RATIO: [0.7, 0.7, 0.7]
++    CE_TEMPLATE_RANGE: 'CTR_POINT'
++  HEAD:
++    TYPE: CENTER
++    NUM_CHANNELS: 256
++  RGSSB:
++    ENABLE: True
++TRAIN:
++  BACKBONE_MULTIPLIER: 0.1
++  DROP_PATH_RATE: 0.1
++  CE_START_EPOCH: 20
++  CE_WARM_EPOCH: 80
++  BATCH_SIZE: 8
++  EPOCH: 10
++  GIOU_WEIGHT: 2.0
++  L1_WEIGHT: 5.0
++  GRAD_CLIP_NORM: 0.1
++  LR: 0.0001
++  LR_DROP_EPOCH: 10
++  NUM_WORKER: 8
++  OPTIMIZER: ADAMW
++  PRINT_INTERVAL: 50
++  FREEZE_MODE: "rgssb_head"
++  FEATURE_CONSISTENCY:
++    ENABLE: True
++    WEIGHT: 0.02
++    LOSS: "l1"
++    NORMALIZE: True
++    DETACH_CLEAN: True
++  RESPONSE_CONSISTENCY:
++    ENABLE: False
++    WEIGHT: 0.0
++    LOSS: "mse"
++    DETACH_CLEAN: True
++  SCHEDULER:
++    TYPE: step
++    DECAY_RATE: 0.1
++  VAL_EPOCH_INTERVAL: 1
++  WEIGHT_DECAY: 0.0001
++  AMP: False
++TEST:
++  EPOCH: 10
++  SEARCH_FACTOR: 4.0
++  SEARCH_SIZE: 256
++  TEMPLATE_FACTOR: 2.0
++  TEMPLATE_SIZE: 128
+diff --git a/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_debug.yaml b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_debug.yaml
+new file mode 100644
+index 0000000..93c9f2a
+--- /dev/null
++++ b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_debug.yaml
+@@ -0,0 +1,84 @@
++# Debug-only RG-SSB training config.
++# This is intentionally tiny and should not be used as a final training recipe.
++DATA:
++  MAX_SAMPLE_INTERVAL: 200
++  MEAN:
++  - 0.485
++  - 0.456
++  - 0.406
++  SEARCH:
++    CENTER_JITTER: 3
++    FACTOR: 4.0
++    SCALE_JITTER: 0.25
++    SIZE: 256
++    NUMBER: 1
++  STD:
++  - 0.229
++  - 0.224
++  - 0.225
++  TEMPLATE:
++    CENTER_JITTER: 0
++    FACTOR: 2.0
++    SCALE_JITTER: 0
++    SIZE: 128
++  TRAIN:
++    DATASETS_NAME:
++    - LASOT
++    - GOT10K_vottrain
++    - COCO17
++    - TRACKINGNET
++    DATASETS_RATIO:
++    - 1
++    - 1
++    - 1
++    - 1
++    SAMPLE_PER_EPOCH: 100
++  VAL:
++    DATASETS_NAME:
++    - GOT10K_votval
++    DATASETS_RATIO:
++    - 1
++    SAMPLE_PER_EPOCH: 20
++MODEL:
++  PRETRAIN_FILE: "output/checkpoints/train/ostrack/vitb_256_mae_ce_32x4_ep300/OSTrack_ep0300.pth.tar"
++  EXTRA_MERGER: False
++  RETURN_INTER: False
++  BACKBONE:
++    TYPE: vit_base_patch16_224_ce
++    STRIDE: 16
++    CE_LOC: [3, 6, 9]
++    CE_KEEP_RATIO: [0.7, 0.7, 0.7]
++    CE_TEMPLATE_RANGE: 'CTR_POINT'
++  HEAD:
++    TYPE: CENTER
++    NUM_CHANNELS: 256
++  RGSSB:
++    ENABLE: True
++TRAIN:
++  BACKBONE_MULTIPLIER: 0.1
++  DROP_PATH_RATE: 0.1
++  CE_START_EPOCH: 20
++  CE_WARM_EPOCH: 80
++  BATCH_SIZE: 1
++  EPOCH: 1
++  GIOU_WEIGHT: 2.0
++  L1_WEIGHT: 5.0
++  GRAD_CLIP_NORM: 0.1
++  LR: 0.0001
++  LR_DROP_EPOCH: 1
++  NUM_WORKER: 2
++  OPTIMIZER: ADAMW
++  PRINT_INTERVAL: 5
++  FREEZE_MODE: "rgssb_only"
++  SCHEDULER:
++    TYPE: step
++    DECAY_RATE: 0.1
++  VAL_EPOCH_INTERVAL: 1
++  WEIGHT_DECAY: 0.0001
++  AMP: False
++TEST:
++  EPOCH: 300
++  SEARCH_FACTOR: 4.0
++  SEARCH_SIZE: 256
++  TEMPLATE_FACTOR: 2.0
++  TEMPLATE_SIZE: 128
+diff --git a/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_lasot_debug.yaml b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_lasot_debug.yaml
+new file mode 100644
+index 0000000..32a4841
+--- /dev/null
++++ b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_lasot_debug.yaml
+@@ -0,0 +1,78 @@
++# Debug-only RG-SSB training config using verified local LaSOT only.
++# This is intentionally tiny and should not be used as a final training recipe.
++DATA:
++  MAX_SAMPLE_INTERVAL: 200
++  MEAN:
++  - 0.485
++  - 0.456
++  - 0.406
++  SEARCH:
++    CENTER_JITTER: 3
++    FACTOR: 4.0
++    SCALE_JITTER: 0.25
++    SIZE: 256
++    NUMBER: 1
++  STD:
++  - 0.229
++  - 0.224
++  - 0.225
++  TEMPLATE:
++    CENTER_JITTER: 0
++    FACTOR: 2.0
++    SCALE_JITTER: 0
++    SIZE: 128
++  TRAIN:
++    DATASETS_NAME:
++    - LASOT
++    DATASETS_RATIO:
++    - 1
++    SAMPLE_PER_EPOCH: 100
++  VAL:
++    DATASETS_NAME:
++    - LASOT
++    DATASETS_RATIO:
++    - 1
++    SAMPLE_PER_EPOCH: 20
++MODEL:
++  PRETRAIN_FILE: "output/checkpoints/train/ostrack/vitb_256_mae_ce_32x4_ep300/OSTrack_ep0300.pth.tar"
++  EXTRA_MERGER: False
++  RETURN_INTER: False
++  BACKBONE:
++    TYPE: vit_base_patch16_224_ce
++    STRIDE: 16
++    CE_LOC: [3, 6, 9]
++    CE_KEEP_RATIO: [0.7, 0.7, 0.7]
++    CE_TEMPLATE_RANGE: 'CTR_POINT'
++  HEAD:
++    TYPE: CENTER
++    NUM_CHANNELS: 256
++  RGSSB:
++    ENABLE: True
++TRAIN:
++  BACKBONE_MULTIPLIER: 0.1
++  DROP_PATH_RATE: 0.1
++  CE_START_EPOCH: 20
++  CE_WARM_EPOCH: 80
++  BATCH_SIZE: 1
++  EPOCH: 1
++  GIOU_WEIGHT: 2.0
++  L1_WEIGHT: 5.0
++  GRAD_CLIP_NORM: 0.1
++  LR: 0.0001
++  LR_DROP_EPOCH: 1
++  NUM_WORKER: 2
++  OPTIMIZER: ADAMW
++  PRINT_INTERVAL: 5
++  FREEZE_MODE: "rgssb_only"
++  SCHEDULER:
++    TYPE: step
++    DECAY_RATE: 0.1
++  VAL_EPOCH_INTERVAL: 1
++  WEIGHT_DECAY: 0.0001
++  AMP: False
++TEST:
++  EPOCH: 1
++  SEARCH_FACTOR: 4.0
++  SEARCH_SIZE: 256
++  TEMPLATE_FACTOR: 2.0
++  TEMPLATE_SIZE: 128
+diff --git a/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_lasot_degraded_1000_debug.yaml b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_lasot_degraded_1000_debug.yaml
+new file mode 100644
+index 0000000..f606cea
+--- /dev/null
++++ b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_lasot_degraded_1000_debug.yaml
+@@ -0,0 +1,88 @@
++# Debug-only RG-SSB training config using verified local LaSOT and 1000 synthetic degraded samples.
++# This is intentionally local/debug scale and should not be used as a final training recipe.
++DATA:
++  MAX_SAMPLE_INTERVAL: 200
++  MEAN:
++  - 0.485
++  - 0.456
++  - 0.406
++  SEARCH:
++    CENTER_JITTER: 3
++    FACTOR: 4.0
++    SCALE_JITTER: 0.25
++    SIZE: 256
++    NUMBER: 1
++  STD:
++  - 0.229
++  - 0.224
++  - 0.225
++  TEMPLATE:
++    CENTER_JITTER: 0
++    FACTOR: 2.0
++    SCALE_JITTER: 0
++    SIZE: 128
++  TRAIN:
++    DATASETS_NAME:
++    - LASOT
++    DATASETS_RATIO:
++    - 1
++    SAMPLE_PER_EPOCH: 1000
++  VAL:
++    DATASETS_NAME:
++    - LASOT
++    DATASETS_RATIO:
++    - 1
++    SAMPLE_PER_EPOCH: 100
++  DEGRADATION:
++    ENABLE: True
++    PROBABILITY: 1.0
++    APPLY_TO: "search_only"
++    TYPES:
++    - motion_blur
++    - low_resolution
++    - gaussian_noise
++    SEVERITY: "medium"
++    SEED: 42
++MODEL:
++  PRETRAIN_FILE: "output/checkpoints/train/ostrack/vitb_256_mae_ce_32x4_ep300/OSTrack_ep0300.pth.tar"
++  EXTRA_MERGER: False
++  RETURN_INTER: False
++  BACKBONE:
++    TYPE: vit_base_patch16_224_ce
++    STRIDE: 16
++    CE_LOC: [3, 6, 9]
++    CE_KEEP_RATIO: [0.7, 0.7, 0.7]
++    CE_TEMPLATE_RANGE: 'CTR_POINT'
++  HEAD:
++    TYPE: CENTER
++    NUM_CHANNELS: 256
++  RGSSB:
++    ENABLE: True
++TRAIN:
++  BACKBONE_MULTIPLIER: 0.1
++  DROP_PATH_RATE: 0.1
++  CE_START_EPOCH: 20
++  CE_WARM_EPOCH: 80
++  BATCH_SIZE: 1
++  EPOCH: 1
++  GIOU_WEIGHT: 2.0
++  L1_WEIGHT: 5.0
++  GRAD_CLIP_NORM: 0.1
++  LR: 0.0001
++  LR_DROP_EPOCH: 1
++  NUM_WORKER: 2
++  OPTIMIZER: ADAMW
++  PRINT_INTERVAL: 5
++  FREEZE_MODE: "rgssb_only"
++  SCHEDULER:
++    TYPE: step
++    DECAY_RATE: 0.1
++  VAL_EPOCH_INTERVAL: 1
++  WEIGHT_DECAY: 0.0001
++  AMP: False
++TEST:
++  EPOCH: 1
++  SEARCH_FACTOR: 4.0
++  SEARCH_SIZE: 256
++  TEMPLATE_FACTOR: 2.0
++  TEMPLATE_SIZE: 128
+diff --git a/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_lasot_degraded_debug.yaml b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_lasot_degraded_debug.yaml
+new file mode 100644
+index 0000000..594c2ab
+--- /dev/null
++++ b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_lasot_degraded_debug.yaml
+@@ -0,0 +1,87 @@
++# Debug-only RG-SSB training config using verified local LaSOT and synthetic search degradations.
++# This is intentionally tiny and should not be used as a final training recipe.
++DATA:
++  MAX_SAMPLE_INTERVAL: 200
++  MEAN:
++  - 0.485
++  - 0.456
++  - 0.406
++  SEARCH:
++    CENTER_JITTER: 3
++    FACTOR: 4.0
++    SCALE_JITTER: 0.25
++    SIZE: 256
++    NUMBER: 1
++  STD:
++  - 0.229
++  - 0.224
++  - 0.225
++  TEMPLATE:
++    CENTER_JITTER: 0
++    FACTOR: 2.0
++    SCALE_JITTER: 0
++    SIZE: 128
++  TRAIN:
++    DATASETS_NAME:
++    - LASOT
++    DATASETS_RATIO:
++    - 1
++    SAMPLE_PER_EPOCH: 100
++  VAL:
++    DATASETS_NAME:
++    - LASOT
++    DATASETS_RATIO:
++    - 1
++    SAMPLE_PER_EPOCH: 20
++  DEGRADATION:
++    ENABLE: True
++    PROBABILITY: 1.0
++    APPLY_TO: "search_only"
++    TYPES:
++    - motion_blur
++    - low_resolution
++    SEVERITY: "medium"
++    SEED: 42
++MODEL:
++  PRETRAIN_FILE: "output/checkpoints/train/ostrack/vitb_256_mae_ce_32x4_ep300/OSTrack_ep0300.pth.tar"
++  EXTRA_MERGER: False
++  RETURN_INTER: False
++  BACKBONE:
++    TYPE: vit_base_patch16_224_ce
++    STRIDE: 16
++    CE_LOC: [3, 6, 9]
++    CE_KEEP_RATIO: [0.7, 0.7, 0.7]
++    CE_TEMPLATE_RANGE: 'CTR_POINT'
++  HEAD:
++    TYPE: CENTER
++    NUM_CHANNELS: 256
++  RGSSB:
++    ENABLE: True
++TRAIN:
++  BACKBONE_MULTIPLIER: 0.1
++  DROP_PATH_RATE: 0.1
++  CE_START_EPOCH: 20
++  CE_WARM_EPOCH: 80
++  BATCH_SIZE: 1
++  EPOCH: 1
++  GIOU_WEIGHT: 2.0
++  L1_WEIGHT: 5.0
++  GRAD_CLIP_NORM: 0.1
++  LR: 0.0001
++  LR_DROP_EPOCH: 1
++  NUM_WORKER: 2
++  OPTIMIZER: ADAMW
++  PRINT_INTERVAL: 5
++  FREEZE_MODE: "rgssb_only"
++  SCHEDULER:
++    TYPE: step
++    DECAY_RATE: 0.1
++  VAL_EPOCH_INTERVAL: 1
++  WEIGHT_DECAY: 0.0001
++  AMP: False
++TEST:
++  EPOCH: 1
++  SEARCH_FACTOR: 4.0
++  SEARCH_SIZE: 256
++  TEMPLATE_FACTOR: 2.0
++  TEMPLATE_SIZE: 128
 diff --git a/lib/config/ostrack/config.py b/lib/config/ostrack/config.py
 index 28f45bd..b4b9e31 100644
 --- a/lib/config/ostrack/config.py
@@ -59,6 +1307,164 @@ index 28f45bd..b4b9e31 100644
  # DATA.SEARCH
  cfg.DATA.SEARCH = edict()
  cfg.DATA.SEARCH.SIZE = 320
+diff --git a/lib/models/layers/rgssb.py b/lib/models/layers/rgssb.py
+new file mode 100644
+index 0000000..165c239
+--- /dev/null
++++ b/lib/models/layers/rgssb.py
+@@ -0,0 +1,152 @@
++"""Minimal Restoration-Guided State Space Block for OSTrack.
++
++This is the first proof-of-concept RG-SSB integration module. It preserves
++token shape and uses a lightweight dependency-free SSM-style proxy branch,
++not a full Mamba implementation.
++"""
++
++from __future__ import annotations
++
++from typing import Optional, Tuple
++
++import torch
++from torch import nn
++
++
++class RestorationGuidedSSB(nn.Module):
++    """Shape-preserving RG-SSB block for search tokens.
++
++    Expected first OSTrack use:
++        [B, 256, 768] -> [B, 256, 768]
++    """
++
++    def __init__(
++        self,
++        dim: int,
++        spatial_size: Optional[Tuple[int, int]] = None,
++        local_kernel_size: int = 3,
++        channel_reduction: int = 4,
++        use_local_branch: bool = True,
++        use_channel_attention: bool = True,
++        use_state_branch: bool = True,
++        dropout: float = 0.0,
++    ) -> None:
++        super().__init__()
++        if dim <= 0:
++            raise ValueError("dim must be a positive integer")
++        if local_kernel_size <= 0 or local_kernel_size % 2 == 0:
++            raise ValueError("local_kernel_size must be a positive odd integer")
++        if channel_reduction <= 0:
++            raise ValueError("channel_reduction must be a positive integer")
++
++        self.dim = int(dim)
++        self.spatial_size = spatial_size
++        self.use_local_branch = bool(use_local_branch)
++        self.use_channel_attention = bool(use_channel_attention)
++        self.use_state_branch = bool(use_state_branch)
++
++        self.norm = nn.LayerNorm(dim)
++
++        padding = local_kernel_size // 2
++        self.local_depthwise = nn.Conv2d(
++            dim,
++            dim,
++            kernel_size=local_kernel_size,
++            padding=padding,
++            groups=dim,
++        )
++        self.local_pointwise = nn.Conv2d(dim, dim, kernel_size=1)
++
++        hidden_dim = max(1, dim // channel_reduction)
++        self.channel_mlp = nn.Sequential(
++            nn.Linear(dim, hidden_dim),
++            nn.GELU(),
++            nn.Linear(hidden_dim, dim),
++            nn.Sigmoid(),
++        )
++
++        self.state_depthwise = nn.Conv1d(
++            dim,
++            dim,
++            kernel_size=3,
++            padding=1,
++            groups=dim,
++        )
++        self.state_gate = nn.Linear(dim, dim)
++
++        self.activation = nn.GELU()
++        self.out_proj = nn.Linear(dim, dim)
++        self.dropout = nn.Dropout(dropout)
++
++    def _resolve_spatial_size(
++        self,
++        token_count: int,
++        spatial_size: Optional[Tuple[int, int]],
++    ) -> Tuple[int, int]:
++        size = spatial_size if spatial_size is not None else self.spatial_size
++        if size is None:
++            raise ValueError("spatial_size is required when the local branch is enabled")
++
++        height, width = int(size[0]), int(size[1])
++        if height <= 0 or width <= 0:
++            raise ValueError("spatial_size values must be positive")
++        if height * width != token_count:
++            raise ValueError(
++                f"spatial_size {size} is incompatible with token count {token_count}; "
++                "expected H*W == N"
++            )
++        return height, width
++
++    def _local_branch(self, x: torch.Tensor, spatial_size: Optional[Tuple[int, int]]) -> torch.Tensor:
++        batch, token_count, channels = x.shape
++        height, width = self._resolve_spatial_size(token_count, spatial_size)
++        feature_map = x.transpose(1, 2).reshape(batch, channels, height, width)
++        feature_map = self.local_depthwise(feature_map)
++        feature_map = self.local_pointwise(feature_map)
++        feature_map = self.activation(feature_map)
++        return feature_map.flatten(2).transpose(1, 2)
++
++    def _channel_attention_branch(self, x: torch.Tensor) -> torch.Tensor:
++        weights = self.channel_mlp(x.mean(dim=1)).unsqueeze(1)
++        return x * weights
++
++    def _state_branch(self, x: torch.Tensor) -> torch.Tensor:
++        sequence_features = self.state_depthwise(x.transpose(1, 2)).transpose(1, 2)
++        gate = torch.sigmoid(self.state_gate(x))
++        return self.activation(sequence_features) * gate
++
++    def forward(
++        self,
++        x: torch.Tensor,
++        template_len: Optional[int] = None,
++        search_len: Optional[int] = None,
++        spatial_size: Optional[Tuple[int, int]] = None,
++    ) -> torch.Tensor:
++        if x.ndim != 3:
++            raise ValueError(f"Expected x with shape [B, N, C], got {tuple(x.shape)}")
++        if x.shape[-1] != self.dim:
++            raise ValueError(f"Expected token dim {self.dim}, got {x.shape[-1]}")
++        if search_len is not None and int(search_len) != x.shape[1]:
++            raise ValueError(f"search_len {search_len} does not match token count {x.shape[1]}")
++        if template_len is not None and int(template_len) < 0:
++            raise ValueError("template_len must be non-negative when provided")
++
++        residual = x
++        x_norm = self.norm(x)
++
++        branches = []
++        if self.use_local_branch:
++            branches.append(self._local_branch(x_norm, spatial_size))
++        if self.use_channel_attention:
++            branches.append(self._channel_attention_branch(x_norm))
++        if self.use_state_branch:
++            branches.append(self._state_branch(x_norm))
++
++        if branches:
++            fused = torch.stack(branches, dim=0).mean(dim=0)
++        else:
++            fused = x_norm
++
++        out = self.out_proj(fused)
++        out = self.dropout(out)
++        return residual + out
 diff --git a/lib/models/ostrack/ostrack.py b/lib/models/ostrack/ostrack.py
 index 406d8e9..143daf1 100644
 --- a/lib/models/ostrack/ostrack.py
@@ -613,6 +2019,190 @@ index b581748..28653c9 100644
      if cfg.TRAIN.OPTIMIZER == "ADAMW":
          optimizer = torch.optim.AdamW(param_dicts, lr=cfg.TRAIN.LR,
                                        weight_decay=cfg.TRAIN.WEIGHT_DECAY)
+diff --git a/lib/train/data/degradation.py b/lib/train/data/degradation.py
+new file mode 100644
+index 0000000..da6a213
+--- /dev/null
++++ b/lib/train/data/degradation.py
+@@ -0,0 +1,178 @@
++"""Training-side synthetic degradations for OSTrack debug experiments.
++
++This is a small local adapter copied from the project degradation logic to keep
++OSTrack training independent from the main project import path. All transforms
++preserve image size and do not modify boxes or masks.
++"""
++
++from __future__ import annotations
++
++from io import BytesIO
++
++import numpy as np
++from PIL import Image
++
++
++SEVERITIES = ("mild", "medium", "severe")
++DEGRADATION_TYPES = ("motion_blur", "low_resolution", "jpeg_compression", "gaussian_noise")
++APPLY_TO_MODES = ("search_only", "template_only", "both_same", "both_different")
++
++if hasattr(Image, "Resampling"):
++    BICUBIC = Image.Resampling.BICUBIC
++else:
++    BICUBIC = Image.BICUBIC
++
++
++def _as_list(value) -> list[str]:
++    if isinstance(value, str):
++        return [value]
++    return [str(v) for v in value]
++
++
++def _to_uint8_rgb(image: np.ndarray) -> np.ndarray:
++    arr = np.asarray(image)
++    if arr.ndim == 2:
++        arr = np.repeat(arr[:, :, None], 3, axis=2)
++    if arr.ndim != 3 or arr.shape[2] not in (1, 3, 4):
++        raise ValueError("Expected image array with shape HxW, HxWx1, HxWx3, or HxWx4")
++    if arr.shape[2] == 1:
++        arr = np.repeat(arr, 3, axis=2)
++    if arr.shape[2] == 4:
++        arr = arr[:, :, :3]
++    if np.issubdtype(arr.dtype, np.floating):
++        max_value = float(np.nanmax(arr)) if arr.size else 1.0
++        if max_value <= 1.0:
++            arr = arr * 255.0
++    return np.clip(arr, 0, 255).astype(np.uint8)
++
++
++def _restore_dtype(arr: np.ndarray, reference: np.ndarray) -> np.ndarray:
++    if np.issubdtype(reference.dtype, np.floating):
++        if reference.size and float(np.nanmax(reference)) <= 1.0:
++            return (arr.astype(np.float32) / 255.0).astype(reference.dtype)
++        return arr.astype(reference.dtype)
++    return arr.astype(reference.dtype)
++
++
++def _pil_from_array(image: np.ndarray) -> Image.Image:
++    return Image.fromarray(_to_uint8_rgb(image), mode="RGB")
++
++
++def _array_from_pil(image: Image.Image, reference: np.ndarray) -> np.ndarray:
++    return _restore_dtype(np.asarray(image.convert("RGB")), np.asarray(reference))
++
++
++def motion_blur(image: np.ndarray, severity: str, rng: np.random.Generator) -> np.ndarray:
++    kernel_sizes = {"mild": 7, "medium": 13, "severe": 21}
++    kernel_size = kernel_sizes[severity]
++    radius = kernel_size // 2
++    angle = float(rng.uniform(0.0, 180.0))
++    theta = np.deg2rad(angle)
++    offsets = np.linspace(-radius, radius, kernel_size)
++    dx = np.rint(np.cos(theta) * offsets).astype(int)
++    dy = np.rint(np.sin(theta) * offsets).astype(int)
++
++    arr = _to_uint8_rgb(image).astype(np.float32)
++    padded = np.pad(arr, ((radius, radius), (radius, radius), (0, 0)), mode="edge")
++    height, width = arr.shape[:2]
++    accum = np.zeros_like(arr, dtype=np.float32)
++    for shift_x, shift_y in zip(dx, dy):
++        y0 = radius + shift_y
++        x0 = radius + shift_x
++        accum += padded[y0 : y0 + height, x0 : x0 + width, :]
++    out = np.clip(accum / float(kernel_size), 0, 255).astype(np.uint8)
++    return _restore_dtype(out, np.asarray(image))
++
++
++def low_resolution(image: np.ndarray, severity: str, rng: np.random.Generator) -> np.ndarray:
++    del rng
++    scales = {"mild": 0.75, "medium": 0.5, "severe": 0.25}
++    pil = _pil_from_array(image)
++    width, height = pil.size
++    scale = scales[severity]
++    low_size = (max(1, int(round(width * scale))), max(1, int(round(height * scale))))
++    out = pil.resize(low_size, BICUBIC).resize((width, height), BICUBIC)
++    return _array_from_pil(out, np.asarray(image))
++
++
++def jpeg_compression(image: np.ndarray, severity: str, rng: np.random.Generator) -> np.ndarray:
++    del rng
++    qualities = {"mild": 70, "medium": 40, "severe": 18}
++    buffer = BytesIO()
++    _pil_from_array(image).save(buffer, format="JPEG", quality=qualities[severity])
++    buffer.seek(0)
++    out = Image.open(buffer).convert("RGB")
++    return _array_from_pil(out, np.asarray(image))
++
++
++def gaussian_noise(image: np.ndarray, severity: str, rng: np.random.Generator) -> np.ndarray:
++    sigmas = {"mild": 8.0, "medium": 20.0, "severe": 40.0}
++    arr = _to_uint8_rgb(image).astype(np.float32)
++    out = np.clip(arr + rng.normal(0.0, sigmas[severity], size=arr.shape), 0, 255).astype(np.uint8)
++    return _restore_dtype(out, np.asarray(image))
++
++
++TRANSFORMS = {
++    "motion_blur": motion_blur,
++    "low_resolution": low_resolution,
++    "jpeg_compression": jpeg_compression,
++    "gaussian_noise": gaussian_noise,
++}
++
++
++class TrainingDegradationAugmentor:
++    """Config-driven degradation augmentor for cropped template/search images."""
++
++    def __init__(self, cfg):
++        self.enabled = bool(getattr(cfg, "ENABLE", False))
++        self.probability = float(getattr(cfg, "PROBABILITY", 0.0))
++        self.apply_to = str(getattr(cfg, "APPLY_TO", "search_only")).lower()
++        self.types = [t.lower() for t in _as_list(getattr(cfg, "TYPES", ["motion_blur", "low_resolution"]))]
++        self.severity = str(getattr(cfg, "SEVERITY", "medium")).lower()
++        self.rng = np.random.default_rng(int(getattr(cfg, "SEED", 42)))
++        self._sample = {"template": None, "search": None}
++        self._validate()
++
++    def _validate(self) -> None:
++        if self.apply_to not in APPLY_TO_MODES:
++            raise ValueError(f"Unsupported DATA.DEGRADATION.APPLY_TO: {self.apply_to}")
++        if self.severity not in SEVERITIES:
++            raise ValueError(f"Unsupported DATA.DEGRADATION.SEVERITY: {self.severity}")
++        if not 0.0 <= self.probability <= 1.0:
++            raise ValueError("DATA.DEGRADATION.PROBABILITY must be in [0, 1]")
++        unknown = [t for t in self.types if t not in DEGRADATION_TYPES]
++        if unknown:
++            raise ValueError(f"Unsupported DATA.DEGRADATION.TYPES: {unknown}")
++        if self.apply_to == "both_different" and len(set(self.types)) < 2:
++            raise ValueError("DATA.DEGRADATION.APPLY_TO=both_different requires at least two types")
++
++    def begin_sample(self) -> None:
++        self._sample = {"template": None, "search": None}
++        if not self.enabled or float(self.rng.random()) > self.probability:
++            return
++
++        if self.apply_to == "search_only":
++            self._sample["search"] = str(self.rng.choice(self.types))
++        elif self.apply_to == "template_only":
++            self._sample["template"] = str(self.rng.choice(self.types))
++        elif self.apply_to == "both_same":
++            choice = str(self.rng.choice(self.types))
++            self._sample["template"] = choice
++            self._sample["search"] = choice
++        elif self.apply_to == "both_different":
++            choices = self.rng.choice(self.types, size=2, replace=False).tolist()
++            self._sample["template"] = str(choices[0])
++            self._sample["search"] = str(choices[1])
++
++    def apply(self, images: list[np.ndarray], role: str) -> list[np.ndarray]:
++        degradation_type = self._sample.get(role)
++        if degradation_type is None:
++            return images
++
++        transformed = []
++        for image in images:
++            out = TRANSFORMS[degradation_type](image, self.severity, self.rng)
++            if out.shape[:2] != image.shape[:2]:
++                raise RuntimeError("Training degradation changed image size")
++            transformed.append(out)
++        return transformed
 diff --git a/lib/train/data/processing.py b/lib/train/data/processing.py
 index 3accc9e..4decaa2 100644
 --- a/lib/train/data/processing.py
@@ -684,3 +2274,69 @@ index 3accc9e..4decaa2 100644
  
              # 2021.1.9 Check whether elements in data[s + '_att'] is all 1
              # Note that type of data[s + '_att'] is tuple, type of ele is torch.tensor
+diff --git a/lib/train/freeze.py b/lib/train/freeze.py
+new file mode 100644
+index 0000000..6921a0b
+--- /dev/null
++++ b/lib/train/freeze.py
+@@ -0,0 +1,60 @@
++def _is_main_process():
++    try:
++        from lib.utils.misc import is_main_process
++
++        return is_main_process()
++    except Exception:
++        return True
++
++
++def summarize_trainable_parameters(net):
++    trainable_params = 0
++    frozen_params = 0
++    trainable_names = []
++    for name, param in net.named_parameters():
++        num_params = param.numel()
++        if param.requires_grad:
++            trainable_params += num_params
++            trainable_names.append(name)
++        else:
++            frozen_params += num_params
++    return trainable_params, frozen_params, trainable_names
++
++
++def apply_freeze_mode(net, cfg):
++    freeze_mode = getattr(cfg.TRAIN, "FREEZE_MODE", "none")
++    if freeze_mode == "none":
++        return summarize_trainable_parameters(net)
++    if freeze_mode == "rgssb_only":
++        for name, param in net.named_parameters():
++            param.requires_grad = "rgssb" in name
++        trainable_params, frozen_params, trainable_names = summarize_trainable_parameters(net)
++        if len(trainable_names) == 0:
++            raise ValueError("TRAIN.FREEZE_MODE=rgssb_only selected, but no rgssb parameters are trainable.")
++        if _is_main_process():
++            print("TRAIN.FREEZE_MODE=rgssb_only")
++            print("Trainable parameters: {}".format(trainable_params))
++            print("Frozen parameters: {}".format(frozen_params))
++            print("RG-SSB trainable parameter names:")
++            for name in trainable_names:
++                print(name)
++        return trainable_params, frozen_params, trainable_names
++    if freeze_mode == "rgssb_head":
++        for name, param in net.named_parameters():
++            param.requires_grad = name.startswith("rgssb") or name.startswith("box_head")
++        trainable_params, frozen_params, trainable_names = summarize_trainable_parameters(net)
++        has_rgssb = any(name.startswith("rgssb") for name in trainable_names)
++        has_head = any(name.startswith("box_head") for name in trainable_names)
++        if not has_rgssb or not has_head:
++            raise ValueError(
++                "TRAIN.FREEZE_MODE=rgssb_head requires trainable rgssb.* and box_head.* parameters."
++            )
++        if _is_main_process():
++            print("TRAIN.FREEZE_MODE=rgssb_head")
++            print("Trainable parameters: {}".format(trainable_params))
++            print("Frozen parameters: {}".format(frozen_params))
++            print("RG-SSB + head trainable parameter names:")
++            for name in trainable_names:
++                print(name)
++        return trainable_params, frozen_params, trainable_names
++    raise ValueError("Unsupported TRAIN.FREEZE_MODE: {}".format(freeze_mode))
