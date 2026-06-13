@@ -1,5 +1,5 @@
 diff --git a/lib/config/ostrack/config.py b/lib/config/ostrack/config.py
-index 28f45bd..e428c47 100644
+index 28f45bd..b4b9e31 100644
 --- a/lib/config/ostrack/config.py
 +++ b/lib/config/ostrack/config.py
 @@ -34,6 +34,20 @@ cfg.MODEL.HEAD = edict()
@@ -23,15 +23,26 @@ index 28f45bd..e428c47 100644
  # TRAIN
  cfg.TRAIN = edict()
  cfg.TRAIN.LR = 0.0001
-@@ -47,6 +61,7 @@ cfg.TRAIN.BACKBONE_MULTIPLIER = 0.1
+@@ -47,6 +61,18 @@ cfg.TRAIN.BACKBONE_MULTIPLIER = 0.1
  cfg.TRAIN.GIOU_WEIGHT = 2.0
  cfg.TRAIN.L1_WEIGHT = 5.0
  cfg.TRAIN.FREEZE_LAYERS = [0, ]
 +cfg.TRAIN.FREEZE_MODE = "none"
++cfg.TRAIN.FEATURE_CONSISTENCY = edict()
++cfg.TRAIN.FEATURE_CONSISTENCY.ENABLE = False
++cfg.TRAIN.FEATURE_CONSISTENCY.WEIGHT = 0.0
++cfg.TRAIN.FEATURE_CONSISTENCY.LOSS = "l1"
++cfg.TRAIN.FEATURE_CONSISTENCY.NORMALIZE = True
++cfg.TRAIN.FEATURE_CONSISTENCY.DETACH_CLEAN = True
++cfg.TRAIN.RESPONSE_CONSISTENCY = edict()
++cfg.TRAIN.RESPONSE_CONSISTENCY.ENABLE = False
++cfg.TRAIN.RESPONSE_CONSISTENCY.WEIGHT = 0.0
++cfg.TRAIN.RESPONSE_CONSISTENCY.LOSS = "mse"
++cfg.TRAIN.RESPONSE_CONSISTENCY.DETACH_CLEAN = True
  cfg.TRAIN.PRINT_INTERVAL = 50
  cfg.TRAIN.VAL_EPOCH_INTERVAL = 20
  cfg.TRAIN.GRAD_CLIP_NORM = 0.1
-@@ -77,6 +92,16 @@ cfg.DATA.VAL = edict()
+@@ -77,6 +103,16 @@ cfg.DATA.VAL = edict()
  cfg.DATA.VAL.DATASETS_NAME = ["GOT10K_votval"]
  cfg.DATA.VAL.DATASETS_RATIO = [1]
  cfg.DATA.VAL.SAMPLE_PER_EPOCH = 10000
@@ -49,1694 +60,45 @@ index 28f45bd..e428c47 100644
  cfg.DATA.SEARCH = edict()
  cfg.DATA.SEARCH.SIZE = 320
 diff --git a/lib/models/ostrack/ostrack.py b/lib/models/ostrack/ostrack.py
-index 406d8e9..3238f12 100644
+index 406d8e9..143daf1 100644
 --- a/lib/models/ostrack/ostrack.py
 +++ b/lib/models/ostrack/ostrack.py
-@@ -10,6 +10,7 @@ from torch import nn
- from torch.nn.modules.transformer import _get_clones
- 
- from lib.models.layers.head import build_box_head
-+from lib.models.layers.rgssb import RestorationGuidedSSB
- from lib.models.ostrack.vit import vit_base_patch16_224
- from lib.models.ostrack.vit_ce import vit_large_patch16_224_ce, vit_base_patch16_224_ce
- from lib.utils.box_ops import box_xyxy_to_cxcywh
-@@ -18,7 +19,7 @@ from lib.utils.box_ops import box_xyxy_to_cxcywh
- class OSTrack(nn.Module):
-     """ This is the base class for OSTrack """
- 
--    def __init__(self, transformer, box_head, aux_loss=False, head_type="CORNER"):
-+    def __init__(self, transformer, box_head, aux_loss=False, head_type="CORNER", cfg=None):
-         """ Initializes the model.
-         Parameters:
-             transformer: torch module of the transformer architecture.
-@@ -27,6 +28,7 @@ class OSTrack(nn.Module):
-         super().__init__()
-         self.backbone = transformer
-         self.box_head = box_head
-+        self.cfg = cfg
- 
-         self.aux_loss = aux_loss
-         self.head_type = head_type
-@@ -37,6 +39,21 @@ class OSTrack(nn.Module):
-         if self.aux_loss:
-             self.box_head = _get_clones(self.box_head, 6)
- 
-+        self.use_rgssb = bool(getattr(getattr(cfg.MODEL, "RGSSB", None), "ENABLE", False)) if cfg is not None else False
-+        self.rgssb = None
-+        if self.use_rgssb:
-+            rgssb_cfg = cfg.MODEL.RGSSB
-+            spatial_size = tuple(rgssb_cfg.SPATIAL_SIZE)
-+            self.rgssb = RestorationGuidedSSB(
-+                dim=rgssb_cfg.DIM,
-+                spatial_size=spatial_size,
-+                local_kernel_size=rgssb_cfg.LOCAL_KERNEL_SIZE,
-+                channel_reduction=rgssb_cfg.CHANNEL_REDUCTION,
-+                use_local_branch=rgssb_cfg.USE_LOCAL_BRANCH,
-+                use_channel_attention=rgssb_cfg.USE_CHANNEL_ATTENTION,
-+                use_state_branch=rgssb_cfg.USE_STATE_BRANCH,
-+            )
-+
-     def forward(self, template: torch.Tensor,
-                 search: torch.Tensor,
-                 ce_template_mask=None,
-@@ -63,6 +80,8 @@ class OSTrack(nn.Module):
-         cat_feature: output embeddings of the backbone, it can be (HW1+HW2, B, C) or (HW2, B, C)
-         """
-         enc_opt = cat_feature[:, -self.feat_len_s:]  # encoder output for the search region (B, HW, C)
-+        if self.rgssb is not None:
-+            enc_opt = self.rgssb(enc_opt, search_len=self.feat_len_s, spatial_size=(self.feat_sz_s, self.feat_sz_s))
-         opt = (enc_opt.unsqueeze(-1)).permute((0, 3, 2, 1)).contiguous()
-         bs, Nq, C, HW = opt.size()
-         opt_feat = opt.view(-1, C, self.feat_sz_s, self.feat_sz_s)
-@@ -134,11 +153,17 @@ def build_ostrack(cfg, training=True):
-         box_head,
-         aux_loss=False,
-         head_type=cfg.MODEL.HEAD.TYPE,
-+        cfg=cfg,
-     )
- 
-     if 'OSTrack' in cfg.MODEL.PRETRAIN_FILE and training:
-         checkpoint = torch.load(cfg.MODEL.PRETRAIN_FILE, map_location="cpu")
-         missing_keys, unexpected_keys = model.load_state_dict(checkpoint["net"], strict=False)
-         print('Load pretrained model from: ' + cfg.MODEL.PRETRAIN_FILE)
-+        if bool(getattr(getattr(cfg.MODEL, "RGSSB", None), "ENABLE", False)):
-+            print("RG-SSB training/debug checkpoint load uses strict=False.")
-+            print("Missing keys are expected for newly initialized rgssb.* parameters.")
-+            print("missing keys: ", missing_keys)
-+            print("unexpected keys: ", unexpected_keys)
- 
-     return model
-diff --git a/lib/test/tracker/ostrack.py b/lib/test/tracker/ostrack.py
-index 3674779..7cf67e2 100644
---- a/lib/test/tracker/ostrack.py
-+++ b/lib/test/tracker/ostrack.py
-@@ -20,7 +20,16 @@ class OSTrack(BaseTracker):
-     def __init__(self, params, dataset_name):
-         super(OSTrack, self).__init__(params)
-         network = build_ostrack(params.cfg, training=False)
--        network.load_state_dict(torch.load(self.params.checkpoint, map_location='cpu')['net'], strict=True)
-+        checkpoint = torch.load(self.params.checkpoint, map_location='cpu')['net']
-+        rgssb_enabled = bool(getattr(getattr(params.cfg.MODEL, "RGSSB", None), "ENABLE", False))
-+        if rgssb_enabled:
-+            missing_keys, unexpected_keys = network.load_state_dict(checkpoint, strict=False)
-+            print("RG-SSB debug config enabled: loading OSTrack checkpoint with strict=False.")
-+            print("Missing keys:", missing_keys)
-+            print("Unexpected keys:", unexpected_keys)
-+            print("Missing rgssb.* keys are expected for an untrained RG-SSB debug module.")
-+        else:
-+            network.load_state_dict(checkpoint, strict=True)
-         self.cfg = params.cfg
-         self.network = network.cuda()
-         self.network.eval()
-diff --git a/lib/train/base_functions.py b/lib/train/base_functions.py
-index b581748..1beb917 100644
---- a/lib/train/base_functions.py
-+++ b/lib/train/base_functions.py
-@@ -6,6 +6,7 @@ from lib.train.dataset import Lasot_lmdb, Got10k_lmdb, MSCOCOSeq_lmdb, ImagenetV
- from lib.train.data import sampler, opencv_loader, processing, LTRLoader
- import lib.train.data.transforms as tfm
- from lib.utils.misc import is_main_process
-+from lib.train.freeze import apply_freeze_mode
- 
- 
- def update_settings(settings, cfg):
-@@ -104,6 +105,7 @@ def build_dataloaders(cfg, settings):
-                                                        mode='sequence',
-                                                        transform=transform_train,
-                                                        joint_transform=transform_joint,
-+                                                       degradation_cfg=cfg.DATA.DEGRADATION,
-                                                        settings=settings)
- 
-     data_processing_val = processing.STARKProcessing(search_area_factor=search_area_factor,
-@@ -150,6 +152,7 @@ def build_dataloaders(cfg, settings):
- 
- 
- def get_optimizer_scheduler(net, cfg):
-+    apply_freeze_mode(net, cfg)
-     train_cls = getattr(cfg.TRAIN, "TRAIN_CLS", False)
-     if train_cls:
-         print("Only training classification head. Learnable parameters are shown below.")
-@@ -176,6 +179,10 @@ def get_optimizer_scheduler(net, cfg):
-                 if p.requires_grad:
-                     print(n)
- 
-+    param_dicts = [group for group in param_dicts if len(group["params"]) > 0]
-+    if len(param_dicts) == 0:
-+        raise ValueError("No trainable parameters found for optimizer.")
-+
-     if cfg.TRAIN.OPTIMIZER == "ADAMW":
-         optimizer = torch.optim.AdamW(param_dicts, lr=cfg.TRAIN.LR,
-                                       weight_decay=cfg.TRAIN.WEIGHT_DECAY)
-diff --git a/lib/train/data/processing.py b/lib/train/data/processing.py
-index 3accc9e..6a67309 100644
---- a/lib/train/data/processing.py
-+++ b/lib/train/data/processing.py
-@@ -3,6 +3,7 @@ import torchvision.transforms as transforms
- from lib.utils import TensorDict
- import lib.train.data.processing_utils as prutils
- import torch.nn.functional as F
-+from lib.train.data.degradation import TrainingDegradationAugmentor
- 
- 
- def stack_tensors(x):
-@@ -46,7 +47,7 @@ class STARKProcessing(BaseProcessing):
-     """
- 
-     def __init__(self, search_area_factor, output_sz, center_jitter_factor, scale_jitter_factor,
--                 mode='pair', settings=None, *args, **kwargs):
-+                 mode='pair', settings=None, degradation_cfg=None, *args, **kwargs):
-         """
-         args:
-             search_area_factor - The size of the search region  relative to the target size.
-@@ -65,6 +66,7 @@ class STARKProcessing(BaseProcessing):
-         self.scale_jitter_factor = scale_jitter_factor
-         self.mode = mode
-         self.settings = settings
-+        self.degradation = TrainingDegradationAugmentor(degradation_cfg) if degradation_cfg is not None else None
- 
-     def _get_jittered_box(self, box, mode):
-         """ Jitter the input box
-@@ -98,6 +100,9 @@ class STARKProcessing(BaseProcessing):
-             data['search_images'], data['search_anno'], data['search_masks'] = self.transform['joint'](
-                 image=data['search_images'], bbox=data['search_anno'], mask=data['search_masks'], new_roll=False)
- 
-+        if self.degradation is not None:
-+            self.degradation.begin_sample()
-+
-         for s in ['template', 'search']:
-             assert self.mode == 'sequence' or len(data[s + '_images']) == 1, \
-                 "In pair mode, num train/test frames must be 1"
-@@ -118,6 +123,8 @@ class STARKProcessing(BaseProcessing):
-             crops, boxes, att_mask, mask_crops = prutils.jittered_center_crop(data[s + '_images'], jittered_anno,
-                                                                               data[s + '_anno'], self.search_area_factor[s],
-                                                                               self.output_sz[s], masks=data[s + '_masks'])
-+            if self.degradation is not None:
-+                crops = self.degradation.apply(crops, role=s)
-             # Apply transforms
-             data[s + '_images'], data[s + '_anno'], data[s + '_att'], data[s + '_masks'] = self.transform[s](
-                 image=crops, bbox=boxes, att=att_mask, mask=mask_crops, joint=False)
-diff --git a/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_debug.yaml b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_debug.yaml
-new file mode 100644
-index 0000000..cc1bd10
---- /dev/null
-+++ b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_debug.yaml
-@@ -0,0 +1,88 @@
-+DATA:
-+  MAX_SAMPLE_INTERVAL: 200
-+  MEAN:
-+  - 0.485
-+  - 0.456
-+  - 0.406
-+  SEARCH:
-+    CENTER_JITTER: 3
-+    FACTOR: 4.0
-+    SCALE_JITTER: 0.25
-+    SIZE: 256
-+    NUMBER: 1
-+  STD:
-+  - 0.229
-+  - 0.224
-+  - 0.225
-+  TEMPLATE:
-+    CENTER_JITTER: 0
-+    FACTOR: 2.0
-+    SCALE_JITTER: 0
-+    SIZE: 128
-+#  TRAIN:
-+#    DATASETS_NAME:
-+#      - GOT10K_train_full
-+#    DATASETS_RATIO:
-+#      - 1
-+#    SAMPLE_PER_EPOCH: 60000
-+
-+  TRAIN:
-+    DATASETS_NAME:
-+    - LASOT
-+    - GOT10K_vottrain
-+    - COCO17
-+    - TRACKINGNET
-+    DATASETS_RATIO:
-+    - 1
-+    - 1
-+    - 1
-+    - 1
-+    SAMPLE_PER_EPOCH: 60000
-+  VAL:
-+    DATASETS_NAME:
-+    - GOT10K_votval
-+    DATASETS_RATIO:
-+    - 1
-+    SAMPLE_PER_EPOCH: 10000
-+MODEL:
-+  PRETRAIN_FILE: "mae_pretrain_vit_base.pth"
-+  EXTRA_MERGER: False
-+  RETURN_INTER: False
-+  BACKBONE:
-+    TYPE: vit_base_patch16_224_ce
-+    STRIDE: 16
-+    CE_LOC: [3, 6, 9]
-+    CE_KEEP_RATIO: [0.7, 0.7, 0.7]
-+    CE_TEMPLATE_RANGE: 'CTR_POINT'  # choose between ALL, CTR_POINT, CTR_REC, GT_BOX
-+  HEAD:
-+    TYPE: CENTER
-+    NUM_CHANNELS: 256
-+  RGSSB:
-+    ENABLE: True
-+TRAIN:
-+  BACKBONE_MULTIPLIER: 0.1
-+  DROP_PATH_RATE: 0.1
-+  CE_START_EPOCH: 20  # candidate elimination start epoch
-+  CE_WARM_EPOCH: 80  # candidate elimination warm up epoch
-+  BATCH_SIZE: 32
-+  EPOCH: 300
-+  GIOU_WEIGHT: 2.0
-+  L1_WEIGHT: 5.0
-+  GRAD_CLIP_NORM: 0.1
-+  LR: 0.0004
-+  LR_DROP_EPOCH: 240
-+  NUM_WORKER: 10
-+  OPTIMIZER: ADAMW
-+  PRINT_INTERVAL: 50
-+  SCHEDULER:
-+    TYPE: step
-+    DECAY_RATE: 0.1
-+  VAL_EPOCH_INTERVAL: 20
-+  WEIGHT_DECAY: 0.0001
-+  AMP: False
-+TEST:
-+  EPOCH: 300
-+  SEARCH_FACTOR: 4.0
-+  SEARCH_SIZE: 256
-+  TEMPLATE_FACTOR: 2.0
-+  TEMPLATE_SIZE: 128
-diff --git a/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_lasot_debug.yaml b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_lasot_debug.yaml
-new file mode 100644
-index 0000000..32a4841
---- /dev/null
-+++ b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_lasot_debug.yaml
-@@ -0,0 +1,78 @@
-+# Debug-only RG-SSB training config using verified local LaSOT only.
-+# This is intentionally tiny and should not be used as a final training recipe.
-+DATA:
-+  MAX_SAMPLE_INTERVAL: 200
-+  MEAN:
-+  - 0.485
-+  - 0.456
-+  - 0.406
-+  SEARCH:
-+    CENTER_JITTER: 3
-+    FACTOR: 4.0
-+    SCALE_JITTER: 0.25
-+    SIZE: 256
-+    NUMBER: 1
-+  STD:
-+  - 0.229
-+  - 0.224
-+  - 0.225
-+  TEMPLATE:
-+    CENTER_JITTER: 0
-+    FACTOR: 2.0
-+    SCALE_JITTER: 0
-+    SIZE: 128
-+  TRAIN:
-+    DATASETS_NAME:
-+    - LASOT
-+    DATASETS_RATIO:
-+    - 1
-+    SAMPLE_PER_EPOCH: 100
-+  VAL:
-+    DATASETS_NAME:
-+    - LASOT
-+    DATASETS_RATIO:
-+    - 1
-+    SAMPLE_PER_EPOCH: 20
-+MODEL:
-+  PRETRAIN_FILE: "output/checkpoints/train/ostrack/vitb_256_mae_ce_32x4_ep300/OSTrack_ep0300.pth.tar"
-+  EXTRA_MERGER: False
-+  RETURN_INTER: False
-+  BACKBONE:
-+    TYPE: vit_base_patch16_224_ce
-+    STRIDE: 16
-+    CE_LOC: [3, 6, 9]
-+    CE_KEEP_RATIO: [0.7, 0.7, 0.7]
-+    CE_TEMPLATE_RANGE: 'CTR_POINT'
-+  HEAD:
-+    TYPE: CENTER
-+    NUM_CHANNELS: 256
-+  RGSSB:
-+    ENABLE: True
-+TRAIN:
-+  BACKBONE_MULTIPLIER: 0.1
-+  DROP_PATH_RATE: 0.1
-+  CE_START_EPOCH: 20
-+  CE_WARM_EPOCH: 80
-+  BATCH_SIZE: 1
-+  EPOCH: 1
-+  GIOU_WEIGHT: 2.0
-+  L1_WEIGHT: 5.0
-+  GRAD_CLIP_NORM: 0.1
-+  LR: 0.0001
-+  LR_DROP_EPOCH: 1
-+  NUM_WORKER: 2
-+  OPTIMIZER: ADAMW
-+  PRINT_INTERVAL: 5
-+  FREEZE_MODE: "rgssb_only"
-+  SCHEDULER:
-+    TYPE: step
-+    DECAY_RATE: 0.1
-+  VAL_EPOCH_INTERVAL: 1
-+  WEIGHT_DECAY: 0.0001
-+  AMP: False
-+TEST:
-+  EPOCH: 1
-+  SEARCH_FACTOR: 4.0
-+  SEARCH_SIZE: 256
-+  TEMPLATE_FACTOR: 2.0
-+  TEMPLATE_SIZE: 128
-diff --git a/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_balanced_3000_debug.yaml b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_balanced_3000_debug.yaml
-new file mode 100644
-index 0000000..df2b9d5
---- /dev/null
-+++ b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_balanced_3000_debug.yaml
-@@ -0,0 +1,88 @@
-+# Debug-only RG-SSB + head training config using verified local LaSOT and balanced clean/degraded samples.
-+# Backbone remains frozen. DATA.DEGRADATION.PROBABILITY=0.5 mixes clean and degraded search crops.
-+DATA:
-+  MAX_SAMPLE_INTERVAL: 200
-+  MEAN:
-+  - 0.485
-+  - 0.456
-+  - 0.406
-+  SEARCH:
-+    CENTER_JITTER: 3
-+    FACTOR: 4.0
-+    SCALE_JITTER: 0.25
-+    SIZE: 256
-+    NUMBER: 1
-+  STD:
-+  - 0.229
-+  - 0.224
-+  - 0.225
-+  TEMPLATE:
-+    CENTER_JITTER: 0
-+    FACTOR: 2.0
-+    SCALE_JITTER: 0
-+    SIZE: 128
-+  TRAIN:
-+    DATASETS_NAME:
-+    - LASOT
-+    DATASETS_RATIO:
-+    - 1
-+    SAMPLE_PER_EPOCH: 3000
-+  VAL:
-+    DATASETS_NAME:
-+    - LASOT
-+    DATASETS_RATIO:
-+    - 1
-+    SAMPLE_PER_EPOCH: 300
-+  DEGRADATION:
-+    ENABLE: True
-+    PROBABILITY: 0.5
-+    APPLY_TO: "search_only"
-+    TYPES:
-+    - motion_blur
-+    - low_resolution
-+    - gaussian_noise
-+    SEVERITY: "medium"
-+    SEED: 42
-+MODEL:
-+  PRETRAIN_FILE: "output/checkpoints/train/ostrack/vitb_256_mae_ce_32x4_ep300/OSTrack_ep0300.pth.tar"
-+  EXTRA_MERGER: False
-+  RETURN_INTER: False
-+  BACKBONE:
-+    TYPE: vit_base_patch16_224_ce
-+    STRIDE: 16
-+    CE_LOC: [3, 6, 9]
-+    CE_KEEP_RATIO: [0.7, 0.7, 0.7]
-+    CE_TEMPLATE_RANGE: 'CTR_POINT'
-+  HEAD:
-+    TYPE: CENTER
-+    NUM_CHANNELS: 256
-+  RGSSB:
-+    ENABLE: True
-+TRAIN:
-+  BACKBONE_MULTIPLIER: 0.1
-+  DROP_PATH_RATE: 0.1
-+  CE_START_EPOCH: 20
-+  CE_WARM_EPOCH: 80
-+  BATCH_SIZE: 1
-+  EPOCH: 1
-+  GIOU_WEIGHT: 2.0
-+  L1_WEIGHT: 5.0
-+  GRAD_CLIP_NORM: 0.1
-+  LR: 0.0001
-+  LR_DROP_EPOCH: 1
-+  NUM_WORKER: 2
-+  OPTIMIZER: ADAMW
-+  PRINT_INTERVAL: 5
-+  FREEZE_MODE: "rgssb_head"
-+  SCHEDULER:
-+    TYPE: step
-+    DECAY_RATE: 0.1
-+  VAL_EPOCH_INTERVAL: 1
-+  WEIGHT_DECAY: 0.0001
-+  AMP: False
-+TEST:
-+  EPOCH: 1
-+  SEARCH_FACTOR: 4.0
-+  SEARCH_SIZE: 256
-+  TEMPLATE_FACTOR: 2.0
-+  TEMPLATE_SIZE: 128
-diff --git a/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_lasot_degraded_debug.yaml b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_lasot_degraded_debug.yaml
-new file mode 100644
-index 0000000..594c2ab
---- /dev/null
-+++ b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_lasot_degraded_debug.yaml
-@@ -0,0 +1,87 @@
-+# Debug-only RG-SSB training config using verified local LaSOT and synthetic search degradations.
-+# This is intentionally tiny and should not be used as a final training recipe.
-+DATA:
-+  MAX_SAMPLE_INTERVAL: 200
-+  MEAN:
-+  - 0.485
-+  - 0.456
-+  - 0.406
-+  SEARCH:
-+    CENTER_JITTER: 3
-+    FACTOR: 4.0
-+    SCALE_JITTER: 0.25
-+    SIZE: 256
-+    NUMBER: 1
-+  STD:
-+  - 0.229
-+  - 0.224
-+  - 0.225
-+  TEMPLATE:
-+    CENTER_JITTER: 0
-+    FACTOR: 2.0
-+    SCALE_JITTER: 0
-+    SIZE: 128
-+  TRAIN:
-+    DATASETS_NAME:
-+    - LASOT
-+    DATASETS_RATIO:
-+    - 1
-+    SAMPLE_PER_EPOCH: 100
-+  VAL:
-+    DATASETS_NAME:
-+    - LASOT
-+    DATASETS_RATIO:
-+    - 1
-+    SAMPLE_PER_EPOCH: 20
-+  DEGRADATION:
-+    ENABLE: True
-+    PROBABILITY: 1.0
-+    APPLY_TO: "search_only"
-+    TYPES:
-+    - motion_blur
-+    - low_resolution
-+    SEVERITY: "medium"
-+    SEED: 42
-+MODEL:
-+  PRETRAIN_FILE: "output/checkpoints/train/ostrack/vitb_256_mae_ce_32x4_ep300/OSTrack_ep0300.pth.tar"
-+  EXTRA_MERGER: False
-+  RETURN_INTER: False
-+  BACKBONE:
-+    TYPE: vit_base_patch16_224_ce
-+    STRIDE: 16
-+    CE_LOC: [3, 6, 9]
-+    CE_KEEP_RATIO: [0.7, 0.7, 0.7]
-+    CE_TEMPLATE_RANGE: 'CTR_POINT'
-+  HEAD:
-+    TYPE: CENTER
-+    NUM_CHANNELS: 256
-+  RGSSB:
-+    ENABLE: True
-+TRAIN:
-+  BACKBONE_MULTIPLIER: 0.1
-+  DROP_PATH_RATE: 0.1
-+  CE_START_EPOCH: 20
-+  CE_WARM_EPOCH: 80
-+  BATCH_SIZE: 1
-+  EPOCH: 1
-+  GIOU_WEIGHT: 2.0
-+  L1_WEIGHT: 5.0
-+  GRAD_CLIP_NORM: 0.1
-+  LR: 0.0001
-+  LR_DROP_EPOCH: 1
-+  NUM_WORKER: 2
-+  OPTIMIZER: ADAMW
-+  PRINT_INTERVAL: 5
-+  FREEZE_MODE: "rgssb_only"
-+  SCHEDULER:
-+    TYPE: step
-+    DECAY_RATE: 0.1
-+  VAL_EPOCH_INTERVAL: 1
-+  WEIGHT_DECAY: 0.0001
-+  AMP: False
-+TEST:
-+  EPOCH: 1
-+  SEARCH_FACTOR: 4.0
-+  SEARCH_SIZE: 256
-+  TEMPLATE_FACTOR: 2.0
-+  TEMPLATE_SIZE: 128
-diff --git a/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_debug.yaml b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_debug.yaml
-new file mode 100644
-index 0000000..93c9f2a
---- /dev/null
-+++ b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_debug.yaml
-@@ -0,0 +1,84 @@
-+# Debug-only RG-SSB training config.
-+# This is intentionally tiny and should not be used as a final training recipe.
-+DATA:
-+  MAX_SAMPLE_INTERVAL: 200
-+  MEAN:
-+  - 0.485
-+  - 0.456
-+  - 0.406
-+  SEARCH:
-+    CENTER_JITTER: 3
-+    FACTOR: 4.0
-+    SCALE_JITTER: 0.25
-+    SIZE: 256
-+    NUMBER: 1
-+  STD:
-+  - 0.229
-+  - 0.224
-+  - 0.225
-+  TEMPLATE:
-+    CENTER_JITTER: 0
-+    FACTOR: 2.0
-+    SCALE_JITTER: 0
-+    SIZE: 128
-+  TRAIN:
-+    DATASETS_NAME:
-+    - LASOT
-+    - GOT10K_vottrain
-+    - COCO17
-+    - TRACKINGNET
-+    DATASETS_RATIO:
-+    - 1
-+    - 1
-+    - 1
-+    - 1
-+    SAMPLE_PER_EPOCH: 100
-+  VAL:
-+    DATASETS_NAME:
-+    - GOT10K_votval
-+    DATASETS_RATIO:
-+    - 1
-+    SAMPLE_PER_EPOCH: 20
-+MODEL:
-+  PRETRAIN_FILE: "output/checkpoints/train/ostrack/vitb_256_mae_ce_32x4_ep300/OSTrack_ep0300.pth.tar"
-+  EXTRA_MERGER: False
-+  RETURN_INTER: False
-+  BACKBONE:
-+    TYPE: vit_base_patch16_224_ce
-+    STRIDE: 16
-+    CE_LOC: [3, 6, 9]
-+    CE_KEEP_RATIO: [0.7, 0.7, 0.7]
-+    CE_TEMPLATE_RANGE: 'CTR_POINT'
-+  HEAD:
-+    TYPE: CENTER
-+    NUM_CHANNELS: 256
-+  RGSSB:
-+    ENABLE: True
-+TRAIN:
-+  BACKBONE_MULTIPLIER: 0.1
-+  DROP_PATH_RATE: 0.1
-+  CE_START_EPOCH: 20
-+  CE_WARM_EPOCH: 80
-+  BATCH_SIZE: 1
-+  EPOCH: 1
-+  GIOU_WEIGHT: 2.0
-+  L1_WEIGHT: 5.0
-+  GRAD_CLIP_NORM: 0.1
-+  LR: 0.0001
-+  LR_DROP_EPOCH: 1
-+  NUM_WORKER: 2
-+  OPTIMIZER: ADAMW
-+  PRINT_INTERVAL: 5
-+  FREEZE_MODE: "rgssb_only"
-+  SCHEDULER:
-+    TYPE: step
-+    DECAY_RATE: 0.1
-+  VAL_EPOCH_INTERVAL: 1
-+  WEIGHT_DECAY: 0.0001
-+  AMP: False
-+TEST:
-+  EPOCH: 300
-+  SEARCH_FACTOR: 4.0
-+  SEARCH_SIZE: 256
-+  TEMPLATE_FACTOR: 2.0
-+  TEMPLATE_SIZE: 128
-diff --git a/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_lasot_degraded_1000_debug.yaml b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_lasot_degraded_1000_debug.yaml
-new file mode 100644
-index 0000000..f606cea
---- /dev/null
-+++ b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_train_lasot_degraded_1000_debug.yaml
-@@ -0,0 +1,88 @@
-+# Debug-only RG-SSB training config using verified local LaSOT and 1000 synthetic degraded samples.
-+# This is intentionally local/debug scale and should not be used as a final training recipe.
-+DATA:
-+  MAX_SAMPLE_INTERVAL: 200
-+  MEAN:
-+  - 0.485
-+  - 0.456
-+  - 0.406
-+  SEARCH:
-+    CENTER_JITTER: 3
-+    FACTOR: 4.0
-+    SCALE_JITTER: 0.25
-+    SIZE: 256
-+    NUMBER: 1
-+  STD:
-+  - 0.229
-+  - 0.224
-+  - 0.225
-+  TEMPLATE:
-+    CENTER_JITTER: 0
-+    FACTOR: 2.0
-+    SCALE_JITTER: 0
-+    SIZE: 128
-+  TRAIN:
-+    DATASETS_NAME:
-+    - LASOT
-+    DATASETS_RATIO:
-+    - 1
-+    SAMPLE_PER_EPOCH: 1000
-+  VAL:
-+    DATASETS_NAME:
-+    - LASOT
-+    DATASETS_RATIO:
-+    - 1
-+    SAMPLE_PER_EPOCH: 100
-+  DEGRADATION:
-+    ENABLE: True
-+    PROBABILITY: 1.0
-+    APPLY_TO: "search_only"
-+    TYPES:
-+    - motion_blur
-+    - low_resolution
-+    - gaussian_noise
-+    SEVERITY: "medium"
-+    SEED: 42
-+MODEL:
-+  PRETRAIN_FILE: "output/checkpoints/train/ostrack/vitb_256_mae_ce_32x4_ep300/OSTrack_ep0300.pth.tar"
-+  EXTRA_MERGER: False
-+  RETURN_INTER: False
-+  BACKBONE:
-+    TYPE: vit_base_patch16_224_ce
-+    STRIDE: 16
-+    CE_LOC: [3, 6, 9]
-+    CE_KEEP_RATIO: [0.7, 0.7, 0.7]
-+    CE_TEMPLATE_RANGE: 'CTR_POINT'
-+  HEAD:
-+    TYPE: CENTER
-+    NUM_CHANNELS: 256
-+  RGSSB:
-+    ENABLE: True
-+TRAIN:
-+  BACKBONE_MULTIPLIER: 0.1
-+  DROP_PATH_RATE: 0.1
-+  CE_START_EPOCH: 20
-+  CE_WARM_EPOCH: 80
-+  BATCH_SIZE: 1
-+  EPOCH: 1
-+  GIOU_WEIGHT: 2.0
-+  L1_WEIGHT: 5.0
-+  GRAD_CLIP_NORM: 0.1
-+  LR: 0.0001
-+  LR_DROP_EPOCH: 1
-+  NUM_WORKER: 2
-+  OPTIMIZER: ADAMW
-+  PRINT_INTERVAL: 5
-+  FREEZE_MODE: "rgssb_only"
-+  SCHEDULER:
-+    TYPE: step
-+    DECAY_RATE: 0.1
-+  VAL_EPOCH_INTERVAL: 1
-+  WEIGHT_DECAY: 0.0001
-+  AMP: False
-+TEST:
-+  EPOCH: 1
-+  SEARCH_FACTOR: 4.0
-+  SEARCH_SIZE: 256
-+  TEMPLATE_FACTOR: 2.0
-+  TEMPLATE_SIZE: 128
-diff --git a/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_1000_debug.yaml b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_1000_debug.yaml
-new file mode 100644
-index 0000000..1d3fc87
---- /dev/null
-+++ b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_1000_debug.yaml
-@@ -0,0 +1,88 @@
-+# Debug-only RG-SSB + head training config using verified local LaSOT and 1000 synthetic degraded samples.
-+# Backbone remains frozen. This is intentionally local/debug scale.
-+DATA:
-+  MAX_SAMPLE_INTERVAL: 200
-+  MEAN:
-+  - 0.485
-+  - 0.456
-+  - 0.406
-+  SEARCH:
-+    CENTER_JITTER: 3
-+    FACTOR: 4.0
-+    SCALE_JITTER: 0.25
-+    SIZE: 256
-+    NUMBER: 1
-+  STD:
-+  - 0.229
-+  - 0.224
-+  - 0.225
-+  TEMPLATE:
-+    CENTER_JITTER: 0
-+    FACTOR: 2.0
-+    SCALE_JITTER: 0
-+    SIZE: 128
-+  TRAIN:
-+    DATASETS_NAME:
-+    - LASOT
-+    DATASETS_RATIO:
-+    - 1
-+    SAMPLE_PER_EPOCH: 1000
-+  VAL:
-+    DATASETS_NAME:
-+    - LASOT
-+    DATASETS_RATIO:
-+    - 1
-+    SAMPLE_PER_EPOCH: 100
-+  DEGRADATION:
-+    ENABLE: True
-+    PROBABILITY: 1.0
-+    APPLY_TO: "search_only"
-+    TYPES:
-+    - motion_blur
-+    - low_resolution
-+    - gaussian_noise
-+    SEVERITY: "medium"
-+    SEED: 42
-+MODEL:
-+  PRETRAIN_FILE: "output/checkpoints/train/ostrack/vitb_256_mae_ce_32x4_ep300/OSTrack_ep0300.pth.tar"
-+  EXTRA_MERGER: False
-+  RETURN_INTER: False
-+  BACKBONE:
-+    TYPE: vit_base_patch16_224_ce
-+    STRIDE: 16
-+    CE_LOC: [3, 6, 9]
-+    CE_KEEP_RATIO: [0.7, 0.7, 0.7]
-+    CE_TEMPLATE_RANGE: 'CTR_POINT'
-+  HEAD:
-+    TYPE: CENTER
-+    NUM_CHANNELS: 256
-+  RGSSB:
-+    ENABLE: True
-+TRAIN:
-+  BACKBONE_MULTIPLIER: 0.1
-+  DROP_PATH_RATE: 0.1
-+  CE_START_EPOCH: 20
-+  CE_WARM_EPOCH: 80
-+  BATCH_SIZE: 1
-+  EPOCH: 1
-+  GIOU_WEIGHT: 2.0
-+  L1_WEIGHT: 5.0
-+  GRAD_CLIP_NORM: 0.1
-+  LR: 0.0001
-+  LR_DROP_EPOCH: 1
-+  NUM_WORKER: 2
-+  OPTIMIZER: ADAMW
-+  PRINT_INTERVAL: 5
-+  FREEZE_MODE: "rgssb_head"
-+  SCHEDULER:
-+    TYPE: step
-+    DECAY_RATE: 0.1
-+  VAL_EPOCH_INTERVAL: 1
-+  WEIGHT_DECAY: 0.0001
-+  AMP: False
-+TEST:
-+  EPOCH: 1
-+  SEARCH_FACTOR: 4.0
-+  SEARCH_SIZE: 256
-+  TEMPLATE_FACTOR: 2.0
-+  TEMPLATE_SIZE: 128
-diff --git a/lib/models/layers/rgssb.py b/lib/models/layers/rgssb.py
-new file mode 100644
-index 0000000..165c239
---- /dev/null
-+++ b/lib/models/layers/rgssb.py
-@@ -0,0 +1,152 @@
-+"""Minimal Restoration-Guided State Space Block for OSTrack.
-+
-+This is the first proof-of-concept RG-SSB integration module. It preserves
-+token shape and uses a lightweight dependency-free SSM-style proxy branch,
-+not a full Mamba implementation.
-+"""
-+
-+from __future__ import annotations
-+
-+from typing import Optional, Tuple
-+
-+import torch
-+from torch import nn
-+
-+
-+class RestorationGuidedSSB(nn.Module):
-+    """Shape-preserving RG-SSB block for search tokens.
-+
-+    Expected first OSTrack use:
-+        [B, 256, 768] -> [B, 256, 768]
-+    """
-+
-+    def __init__(
-+        self,
-+        dim: int,
-+        spatial_size: Optional[Tuple[int, int]] = None,
-+        local_kernel_size: int = 3,
-+        channel_reduction: int = 4,
-+        use_local_branch: bool = True,
-+        use_channel_attention: bool = True,
-+        use_state_branch: bool = True,
-+        dropout: float = 0.0,
-+    ) -> None:
-+        super().__init__()
-+        if dim <= 0:
-+            raise ValueError("dim must be a positive integer")
-+        if local_kernel_size <= 0 or local_kernel_size % 2 == 0:
-+            raise ValueError("local_kernel_size must be a positive odd integer")
-+        if channel_reduction <= 0:
-+            raise ValueError("channel_reduction must be a positive integer")
-+
-+        self.dim = int(dim)
-+        self.spatial_size = spatial_size
-+        self.use_local_branch = bool(use_local_branch)
-+        self.use_channel_attention = bool(use_channel_attention)
-+        self.use_state_branch = bool(use_state_branch)
-+
-+        self.norm = nn.LayerNorm(dim)
-+
-+        padding = local_kernel_size // 2
-+        self.local_depthwise = nn.Conv2d(
-+            dim,
-+            dim,
-+            kernel_size=local_kernel_size,
-+            padding=padding,
-+            groups=dim,
-+        )
-+        self.local_pointwise = nn.Conv2d(dim, dim, kernel_size=1)
-+
-+        hidden_dim = max(1, dim // channel_reduction)
-+        self.channel_mlp = nn.Sequential(
-+            nn.Linear(dim, hidden_dim),
-+            nn.GELU(),
-+            nn.Linear(hidden_dim, dim),
-+            nn.Sigmoid(),
-+        )
-+
-+        self.state_depthwise = nn.Conv1d(
-+            dim,
-+            dim,
-+            kernel_size=3,
-+            padding=1,
-+            groups=dim,
-+        )
-+        self.state_gate = nn.Linear(dim, dim)
-+
-+        self.activation = nn.GELU()
-+        self.out_proj = nn.Linear(dim, dim)
-+        self.dropout = nn.Dropout(dropout)
-+
-+    def _resolve_spatial_size(
-+        self,
-+        token_count: int,
-+        spatial_size: Optional[Tuple[int, int]],
-+    ) -> Tuple[int, int]:
-+        size = spatial_size if spatial_size is not None else self.spatial_size
-+        if size is None:
-+            raise ValueError("spatial_size is required when the local branch is enabled")
-+
-+        height, width = int(size[0]), int(size[1])
-+        if height <= 0 or width <= 0:
-+            raise ValueError("spatial_size values must be positive")
-+        if height * width != token_count:
-+            raise ValueError(
-+                f"spatial_size {size} is incompatible with token count {token_count}; "
-+                "expected H*W == N"
-+            )
-+        return height, width
-+
-+    def _local_branch(self, x: torch.Tensor, spatial_size: Optional[Tuple[int, int]]) -> torch.Tensor:
-+        batch, token_count, channels = x.shape
-+        height, width = self._resolve_spatial_size(token_count, spatial_size)
-+        feature_map = x.transpose(1, 2).reshape(batch, channels, height, width)
-+        feature_map = self.local_depthwise(feature_map)
-+        feature_map = self.local_pointwise(feature_map)
-+        feature_map = self.activation(feature_map)
-+        return feature_map.flatten(2).transpose(1, 2)
-+
-+    def _channel_attention_branch(self, x: torch.Tensor) -> torch.Tensor:
-+        weights = self.channel_mlp(x.mean(dim=1)).unsqueeze(1)
-+        return x * weights
-+
-+    def _state_branch(self, x: torch.Tensor) -> torch.Tensor:
-+        sequence_features = self.state_depthwise(x.transpose(1, 2)).transpose(1, 2)
-+        gate = torch.sigmoid(self.state_gate(x))
-+        return self.activation(sequence_features) * gate
-+
-+    def forward(
-+        self,
-+        x: torch.Tensor,
-+        template_len: Optional[int] = None,
-+        search_len: Optional[int] = None,
-+        spatial_size: Optional[Tuple[int, int]] = None,
-+    ) -> torch.Tensor:
-+        if x.ndim != 3:
-+            raise ValueError(f"Expected x with shape [B, N, C], got {tuple(x.shape)}")
-+        if x.shape[-1] != self.dim:
-+            raise ValueError(f"Expected token dim {self.dim}, got {x.shape[-1]}")
-+        if search_len is not None and int(search_len) != x.shape[1]:
-+            raise ValueError(f"search_len {search_len} does not match token count {x.shape[1]}")
-+        if template_len is not None and int(template_len) < 0:
-+            raise ValueError("template_len must be non-negative when provided")
-+
-+        residual = x
-+        x_norm = self.norm(x)
-+
-+        branches = []
-+        if self.use_local_branch:
-+            branches.append(self._local_branch(x_norm, spatial_size))
-+        if self.use_channel_attention:
-+            branches.append(self._channel_attention_branch(x_norm))
-+        if self.use_state_branch:
-+            branches.append(self._state_branch(x_norm))
-+
-+        if branches:
-+            fused = torch.stack(branches, dim=0).mean(dim=0)
-+        else:
-+            fused = x_norm
-+
-+        out = self.out_proj(fused)
-+        out = self.dropout(out)
-+        return residual + out
-diff --git a/lib/train/freeze.py b/lib/train/freeze.py
-new file mode 100644
-index 0000000..6921a0b
---- /dev/null
-+++ b/lib/train/freeze.py
-@@ -0,0 +1,60 @@
-+def _is_main_process():
-+    try:
-+        from lib.utils.misc import is_main_process
-+
-+        return is_main_process()
-+    except Exception:
-+        return True
-+
-+
-+def summarize_trainable_parameters(net):
-+    trainable_params = 0
-+    frozen_params = 0
-+    trainable_names = []
-+    for name, param in net.named_parameters():
-+        num_params = param.numel()
-+        if param.requires_grad:
-+            trainable_params += num_params
-+            trainable_names.append(name)
-+        else:
-+            frozen_params += num_params
-+    return trainable_params, frozen_params, trainable_names
-+
-+
-+def apply_freeze_mode(net, cfg):
-+    freeze_mode = getattr(cfg.TRAIN, "FREEZE_MODE", "none")
-+    if freeze_mode == "none":
-+        return summarize_trainable_parameters(net)
-+    if freeze_mode == "rgssb_only":
-+        for name, param in net.named_parameters():
-+            param.requires_grad = "rgssb" in name
-+        trainable_params, frozen_params, trainable_names = summarize_trainable_parameters(net)
-+        if len(trainable_names) == 0:
-+            raise ValueError("TRAIN.FREEZE_MODE=rgssb_only selected, but no rgssb parameters are trainable.")
-+        if _is_main_process():
-+            print("TRAIN.FREEZE_MODE=rgssb_only")
-+            print("Trainable parameters: {}".format(trainable_params))
-+            print("Frozen parameters: {}".format(frozen_params))
-+            print("RG-SSB trainable parameter names:")
-+            for name in trainable_names:
-+                print(name)
-+        return trainable_params, frozen_params, trainable_names
-+    if freeze_mode == "rgssb_head":
-+        for name, param in net.named_parameters():
-+            param.requires_grad = name.startswith("rgssb") or name.startswith("box_head")
-+        trainable_params, frozen_params, trainable_names = summarize_trainable_parameters(net)
-+        has_rgssb = any(name.startswith("rgssb") for name in trainable_names)
-+        has_head = any(name.startswith("box_head") for name in trainable_names)
-+        if not has_rgssb or not has_head:
-+            raise ValueError(
-+                "TRAIN.FREEZE_MODE=rgssb_head requires trainable rgssb.* and box_head.* parameters."
-+            )
-+        if _is_main_process():
-+            print("TRAIN.FREEZE_MODE=rgssb_head")
-+            print("Trainable parameters: {}".format(trainable_params))
-+            print("Frozen parameters: {}".format(frozen_params))
-+            print("RG-SSB + head trainable parameter names:")
-+            for name in trainable_names:
-+                print(name)
-+        return trainable_params, frozen_params, trainable_names
-+    raise ValueError("Unsupported TRAIN.FREEZE_MODE: {}".format(freeze_mode))
-diff --git a/lib/train/data/degradation.py b/lib/train/data/degradation.py
-new file mode 100644
-index 0000000..da6a213
---- /dev/null
-+++ b/lib/train/data/degradation.py
-@@ -0,0 +1,178 @@
-+"""Training-side synthetic degradations for OSTrack debug experiments.
-+
-+This is a small local adapter copied from the project degradation logic to keep
-+OSTrack training independent from the main project import path. All transforms
-+preserve image size and do not modify boxes or masks.
-+"""
-+
-+from __future__ import annotations
-+
-+from io import BytesIO
-+
-+import numpy as np
-+from PIL import Image
-+
-+
-+SEVERITIES = ("mild", "medium", "severe")
-+DEGRADATION_TYPES = ("motion_blur", "low_resolution", "jpeg_compression", "gaussian_noise")
-+APPLY_TO_MODES = ("search_only", "template_only", "both_same", "both_different")
-+
-+if hasattr(Image, "Resampling"):
-+    BICUBIC = Image.Resampling.BICUBIC
-+else:
-+    BICUBIC = Image.BICUBIC
-+
-+
-+def _as_list(value) -> list[str]:
-+    if isinstance(value, str):
-+        return [value]
-+    return [str(v) for v in value]
-+
-+
-+def _to_uint8_rgb(image: np.ndarray) -> np.ndarray:
-+    arr = np.asarray(image)
-+    if arr.ndim == 2:
-+        arr = np.repeat(arr[:, :, None], 3, axis=2)
-+    if arr.ndim != 3 or arr.shape[2] not in (1, 3, 4):
-+        raise ValueError("Expected image array with shape HxW, HxWx1, HxWx3, or HxWx4")
-+    if arr.shape[2] == 1:
-+        arr = np.repeat(arr, 3, axis=2)
-+    if arr.shape[2] == 4:
-+        arr = arr[:, :, :3]
-+    if np.issubdtype(arr.dtype, np.floating):
-+        max_value = float(np.nanmax(arr)) if arr.size else 1.0
-+        if max_value <= 1.0:
-+            arr = arr * 255.0
-+    return np.clip(arr, 0, 255).astype(np.uint8)
-+
-+
-+def _restore_dtype(arr: np.ndarray, reference: np.ndarray) -> np.ndarray:
-+    if np.issubdtype(reference.dtype, np.floating):
-+        if reference.size and float(np.nanmax(reference)) <= 1.0:
-+            return (arr.astype(np.float32) / 255.0).astype(reference.dtype)
-+        return arr.astype(reference.dtype)
-+    return arr.astype(reference.dtype)
-+
-+
-+def _pil_from_array(image: np.ndarray) -> Image.Image:
-+    return Image.fromarray(_to_uint8_rgb(image), mode="RGB")
-+
-+
-+def _array_from_pil(image: Image.Image, reference: np.ndarray) -> np.ndarray:
-+    return _restore_dtype(np.asarray(image.convert("RGB")), np.asarray(reference))
-+
-+
-+def motion_blur(image: np.ndarray, severity: str, rng: np.random.Generator) -> np.ndarray:
-+    kernel_sizes = {"mild": 7, "medium": 13, "severe": 21}
-+    kernel_size = kernel_sizes[severity]
-+    radius = kernel_size // 2
-+    angle = float(rng.uniform(0.0, 180.0))
-+    theta = np.deg2rad(angle)
-+    offsets = np.linspace(-radius, radius, kernel_size)
-+    dx = np.rint(np.cos(theta) * offsets).astype(int)
-+    dy = np.rint(np.sin(theta) * offsets).astype(int)
-+
-+    arr = _to_uint8_rgb(image).astype(np.float32)
-+    padded = np.pad(arr, ((radius, radius), (radius, radius), (0, 0)), mode="edge")
-+    height, width = arr.shape[:2]
-+    accum = np.zeros_like(arr, dtype=np.float32)
-+    for shift_x, shift_y in zip(dx, dy):
-+        y0 = radius + shift_y
-+        x0 = radius + shift_x
-+        accum += padded[y0 : y0 + height, x0 : x0 + width, :]
-+    out = np.clip(accum / float(kernel_size), 0, 255).astype(np.uint8)
-+    return _restore_dtype(out, np.asarray(image))
-+
-+
-+def low_resolution(image: np.ndarray, severity: str, rng: np.random.Generator) -> np.ndarray:
-+    del rng
-+    scales = {"mild": 0.75, "medium": 0.5, "severe": 0.25}
-+    pil = _pil_from_array(image)
-+    width, height = pil.size
-+    scale = scales[severity]
-+    low_size = (max(1, int(round(width * scale))), max(1, int(round(height * scale))))
-+    out = pil.resize(low_size, BICUBIC).resize((width, height), BICUBIC)
-+    return _array_from_pil(out, np.asarray(image))
-+
-+
-+def jpeg_compression(image: np.ndarray, severity: str, rng: np.random.Generator) -> np.ndarray:
-+    del rng
-+    qualities = {"mild": 70, "medium": 40, "severe": 18}
-+    buffer = BytesIO()
-+    _pil_from_array(image).save(buffer, format="JPEG", quality=qualities[severity])
-+    buffer.seek(0)
-+    out = Image.open(buffer).convert("RGB")
-+    return _array_from_pil(out, np.asarray(image))
-+
-+
-+def gaussian_noise(image: np.ndarray, severity: str, rng: np.random.Generator) -> np.ndarray:
-+    sigmas = {"mild": 8.0, "medium": 20.0, "severe": 40.0}
-+    arr = _to_uint8_rgb(image).astype(np.float32)
-+    out = np.clip(arr + rng.normal(0.0, sigmas[severity], size=arr.shape), 0, 255).astype(np.uint8)
-+    return _restore_dtype(out, np.asarray(image))
-+
-+
-+TRANSFORMS = {
-+    "motion_blur": motion_blur,
-+    "low_resolution": low_resolution,
-+    "jpeg_compression": jpeg_compression,
-+    "gaussian_noise": gaussian_noise,
-+}
-+
-+
-+class TrainingDegradationAugmentor:
-+    """Config-driven degradation augmentor for cropped template/search images."""
-+
-+    def __init__(self, cfg):
-+        self.enabled = bool(getattr(cfg, "ENABLE", False))
-+        self.probability = float(getattr(cfg, "PROBABILITY", 0.0))
-+        self.apply_to = str(getattr(cfg, "APPLY_TO", "search_only")).lower()
-+        self.types = [t.lower() for t in _as_list(getattr(cfg, "TYPES", ["motion_blur", "low_resolution"]))]
-+        self.severity = str(getattr(cfg, "SEVERITY", "medium")).lower()
-+        self.rng = np.random.default_rng(int(getattr(cfg, "SEED", 42)))
-+        self._sample = {"template": None, "search": None}
-+        self._validate()
-+
-+    def _validate(self) -> None:
-+        if self.apply_to not in APPLY_TO_MODES:
-+            raise ValueError(f"Unsupported DATA.DEGRADATION.APPLY_TO: {self.apply_to}")
-+        if self.severity not in SEVERITIES:
-+            raise ValueError(f"Unsupported DATA.DEGRADATION.SEVERITY: {self.severity}")
-+        if not 0.0 <= self.probability <= 1.0:
-+            raise ValueError("DATA.DEGRADATION.PROBABILITY must be in [0, 1]")
-+        unknown = [t for t in self.types if t not in DEGRADATION_TYPES]
-+        if unknown:
-+            raise ValueError(f"Unsupported DATA.DEGRADATION.TYPES: {unknown}")
-+        if self.apply_to == "both_different" and len(set(self.types)) < 2:
-+            raise ValueError("DATA.DEGRADATION.APPLY_TO=both_different requires at least two types")
-+
-+    def begin_sample(self) -> None:
-+        self._sample = {"template": None, "search": None}
-+        if not self.enabled or float(self.rng.random()) > self.probability:
-+            return
-+
-+        if self.apply_to == "search_only":
-+            self._sample["search"] = str(self.rng.choice(self.types))
-+        elif self.apply_to == "template_only":
-+            self._sample["template"] = str(self.rng.choice(self.types))
-+        elif self.apply_to == "both_same":
-+            choice = str(self.rng.choice(self.types))
-+            self._sample["template"] = choice
-+            self._sample["search"] = choice
-+        elif self.apply_to == "both_different":
-+            choices = self.rng.choice(self.types, size=2, replace=False).tolist()
-+            self._sample["template"] = str(choices[0])
-+            self._sample["search"] = str(choices[1])
-+
-+    def apply(self, images: list[np.ndarray], role: str) -> list[np.ndarray]:
-+        degradation_type = self._sample.get(role)
-+        if degradation_type is None:
-+            return images
-+
-+        transformed = []
-+        for image in images:
-+            out = TRANSFORMS[degradation_type](image, self.severity, self.rng)
-+            if out.shape[:2] != image.shape[:2]:
-+                raise RuntimeError("Training degradation changed image size")
-+            transformed.append(out)
-+        return transformed
-diff --git a/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_3000_debug.yaml b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_3000_debug.yaml
-new file mode 100644
-index 0000000..10cb549
---- /dev/null
-+++ b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_3000_debug.yaml
-@@ -0,0 +1,88 @@
-+# Debug-only RG-SSB + head training config using verified local LaSOT and 3000 synthetic degraded samples.
-+# Backbone remains frozen. This scales the 1000-sample local debug setup without adding new modules or losses.
-+DATA:
-+  MAX_SAMPLE_INTERVAL: 200
-+  MEAN:
-+  - 0.485
-+  - 0.456
-+  - 0.406
-+  SEARCH:
-+    CENTER_JITTER: 3
-+    FACTOR: 4.0
-+    SCALE_JITTER: 0.25
-+    SIZE: 256
-+    NUMBER: 1
-+  STD:
-+  - 0.229
-+  - 0.224
-+  - 0.225
-+  TEMPLATE:
-+    CENTER_JITTER: 0
-+    FACTOR: 2.0
-+    SCALE_JITTER: 0
-+    SIZE: 128
-+  TRAIN:
-+    DATASETS_NAME:
-+    - LASOT
-+    DATASETS_RATIO:
-+    - 1
-+    SAMPLE_PER_EPOCH: 3000
-+  VAL:
-+    DATASETS_NAME:
-+    - LASOT
-+    DATASETS_RATIO:
-+    - 1
-+    SAMPLE_PER_EPOCH: 300
-+  DEGRADATION:
-+    ENABLE: True
-+    PROBABILITY: 1.0
-+    APPLY_TO: "search_only"
-+    TYPES:
-+    - motion_blur
-+    - low_resolution
-+    - gaussian_noise
-+    SEVERITY: "medium"
-+    SEED: 42
-+MODEL:
-+  PRETRAIN_FILE: "output/checkpoints/train/ostrack/vitb_256_mae_ce_32x4_ep300/OSTrack_ep0300.pth.tar"
-+  EXTRA_MERGER: False
-+  RETURN_INTER: False
-+  BACKBONE:
-+    TYPE: vit_base_patch16_224_ce
-+    STRIDE: 16
-+    CE_LOC: [3, 6, 9]
-+    CE_KEEP_RATIO: [0.7, 0.7, 0.7]
-+    CE_TEMPLATE_RANGE: 'CTR_POINT'
-+  HEAD:
-+    TYPE: CENTER
-+    NUM_CHANNELS: 256
-+  RGSSB:
-+    ENABLE: True
-+TRAIN:
-+  BACKBONE_MULTIPLIER: 0.1
-+  DROP_PATH_RATE: 0.1
-+  CE_START_EPOCH: 20
-+  CE_WARM_EPOCH: 80
-+  BATCH_SIZE: 1
-+  EPOCH: 1
-+  GIOU_WEIGHT: 2.0
-+  L1_WEIGHT: 5.0
-+  GRAD_CLIP_NORM: 0.1
-+  LR: 0.0001
-+  LR_DROP_EPOCH: 1
-+  NUM_WORKER: 2
-+  OPTIMIZER: ADAMW
-+  PRINT_INTERVAL: 5
-+  FREEZE_MODE: "rgssb_head"
-+  SCHEDULER:
-+    TYPE: step
-+    DECAY_RATE: 0.1
-+  VAL_EPOCH_INTERVAL: 1
-+  WEIGHT_DECAY: 0.0001
-+  AMP: False
-+TEST:
-+  EPOCH: 1
-+  SEARCH_FACTOR: 4.0
-+  SEARCH_SIZE: 256
-+  TEMPLATE_FACTOR: 2.0
-+  TEMPLATE_SIZE: 128
-
-# Feature consistency integration update
-diff --git a/lib/config/ostrack/config.py b/lib/config/ostrack/config.py
-index 28f45bd..1be6892 100644
---- a/lib/config/ostrack/config.py
-+++ b/lib/config/ostrack/config.py
 @@ -1,144 +1,175 @@
--from easydict import EasyDict as edict
--import yaml
--
 -"""
--Add default config for OSTrack.
+-Basic OSTrack model.
 -"""
--cfg = edict()
+-import math
+-import os
+-from typing import List
 -
--# MODEL
--cfg.MODEL = edict()
--cfg.MODEL.PRETRAIN_FILE = "mae_pretrain_vit_base.pth"
--cfg.MODEL.EXTRA_MERGER = False
--
--cfg.MODEL.RETURN_INTER = False
--cfg.MODEL.RETURN_STAGES = []
--
--# MODEL.BACKBONE
--cfg.MODEL.BACKBONE = edict()
--cfg.MODEL.BACKBONE.TYPE = "vit_base_patch16_224"
--cfg.MODEL.BACKBONE.STRIDE = 16
--cfg.MODEL.BACKBONE.MID_PE = False
--cfg.MODEL.BACKBONE.SEP_SEG = False
--cfg.MODEL.BACKBONE.CAT_MODE = 'direct'
--cfg.MODEL.BACKBONE.MERGE_LAYER = 0
--cfg.MODEL.BACKBONE.ADD_CLS_TOKEN = False
--cfg.MODEL.BACKBONE.CLS_TOKEN_USE_MODE = 'ignore'
--
--cfg.MODEL.BACKBONE.CE_LOC = []
--cfg.MODEL.BACKBONE.CE_KEEP_RATIO = []
--cfg.MODEL.BACKBONE.CE_TEMPLATE_RANGE = 'ALL'  # choose between ALL, CTR_POINT, CTR_REC, GT_BOX
--
--# MODEL.HEAD
-+from easydict import EasyDict as edict
-+import yaml
-+
-+"""
-+Add default config for OSTrack.
-+"""
-+cfg = edict()
-+
-+# MODEL
-+cfg.MODEL = edict()
-+cfg.MODEL.PRETRAIN_FILE = "mae_pretrain_vit_base.pth"
-+cfg.MODEL.EXTRA_MERGER = False
-+
-+cfg.MODEL.RETURN_INTER = False
-+cfg.MODEL.RETURN_STAGES = []
-+
-+# MODEL.BACKBONE
-+cfg.MODEL.BACKBONE = edict()
-+cfg.MODEL.BACKBONE.TYPE = "vit_base_patch16_224"
-+cfg.MODEL.BACKBONE.STRIDE = 16
-+cfg.MODEL.BACKBONE.MID_PE = False
-+cfg.MODEL.BACKBONE.SEP_SEG = False
-+cfg.MODEL.BACKBONE.CAT_MODE = 'direct'
-+cfg.MODEL.BACKBONE.MERGE_LAYER = 0
-+cfg.MODEL.BACKBONE.ADD_CLS_TOKEN = False
-+cfg.MODEL.BACKBONE.CLS_TOKEN_USE_MODE = 'ignore'
-+
-+cfg.MODEL.BACKBONE.CE_LOC = []
-+cfg.MODEL.BACKBONE.CE_KEEP_RATIO = []
-+cfg.MODEL.BACKBONE.CE_TEMPLATE_RANGE = 'ALL'  # choose between ALL, CTR_POINT, CTR_REC, GT_BOX
-+
-+# MODEL.HEAD
- cfg.MODEL.HEAD = edict()
- cfg.MODEL.HEAD.TYPE = "CENTER"
- cfg.MODEL.HEAD.NUM_CHANNELS = 256
- 
-+# MODEL.RGSSB
-+# Minimal proof-of-concept Restoration-Guided State Space Block.
-+# Disabled by default so original OSTrack behavior and strict checkpoint
-+# loading remain unchanged.
-+cfg.MODEL.RGSSB = edict()
-+cfg.MODEL.RGSSB.ENABLE = False
-+cfg.MODEL.RGSSB.DIM = 768
-+cfg.MODEL.RGSSB.SPATIAL_SIZE = [16, 16]
-+cfg.MODEL.RGSSB.LOCAL_KERNEL_SIZE = 3
-+cfg.MODEL.RGSSB.CHANNEL_REDUCTION = 4
-+cfg.MODEL.RGSSB.USE_LOCAL_BRANCH = True
-+cfg.MODEL.RGSSB.USE_CHANNEL_ATTENTION = True
-+cfg.MODEL.RGSSB.USE_STATE_BRANCH = True
-+
- # TRAIN
- cfg.TRAIN = edict()
--cfg.TRAIN.LR = 0.0001
--cfg.TRAIN.WEIGHT_DECAY = 0.0001
--cfg.TRAIN.EPOCH = 500
--cfg.TRAIN.LR_DROP_EPOCH = 400
--cfg.TRAIN.BATCH_SIZE = 16
--cfg.TRAIN.NUM_WORKER = 8
--cfg.TRAIN.OPTIMIZER = "ADAMW"
--cfg.TRAIN.BACKBONE_MULTIPLIER = 0.1
--cfg.TRAIN.GIOU_WEIGHT = 2.0
--cfg.TRAIN.L1_WEIGHT = 5.0
-+cfg.TRAIN.LR = 0.0001
-+cfg.TRAIN.WEIGHT_DECAY = 0.0001
-+cfg.TRAIN.EPOCH = 500
-+cfg.TRAIN.LR_DROP_EPOCH = 400
-+cfg.TRAIN.BATCH_SIZE = 16
-+cfg.TRAIN.NUM_WORKER = 8
-+cfg.TRAIN.OPTIMIZER = "ADAMW"
-+cfg.TRAIN.BACKBONE_MULTIPLIER = 0.1
-+cfg.TRAIN.GIOU_WEIGHT = 2.0
-+cfg.TRAIN.L1_WEIGHT = 5.0
- cfg.TRAIN.FREEZE_LAYERS = [0, ]
-+cfg.TRAIN.FREEZE_MODE = "none"
-+cfg.TRAIN.FEATURE_CONSISTENCY = edict()
-+cfg.TRAIN.FEATURE_CONSISTENCY.ENABLE = False
-+cfg.TRAIN.FEATURE_CONSISTENCY.WEIGHT = 0.0
-+cfg.TRAIN.FEATURE_CONSISTENCY.LOSS = "l1"
-+cfg.TRAIN.FEATURE_CONSISTENCY.NORMALIZE = True
-+cfg.TRAIN.FEATURE_CONSISTENCY.DETACH_CLEAN = True
- cfg.TRAIN.PRINT_INTERVAL = 50
- cfg.TRAIN.VAL_EPOCH_INTERVAL = 20
--cfg.TRAIN.GRAD_CLIP_NORM = 0.1
--cfg.TRAIN.AMP = False
--
--cfg.TRAIN.CE_START_EPOCH = 20  # candidate elimination start epoch
--cfg.TRAIN.CE_WARM_EPOCH = 80  # candidate elimination warm up epoch
--cfg.TRAIN.DROP_PATH_RATE = 0.1  # drop path rate for ViT backbone
--
--# TRAIN.SCHEDULER
--cfg.TRAIN.SCHEDULER = edict()
--cfg.TRAIN.SCHEDULER.TYPE = "step"
--cfg.TRAIN.SCHEDULER.DECAY_RATE = 0.1
--
--# DATA
--cfg.DATA = edict()
--cfg.DATA.SAMPLER_MODE = "causal"  # sampling methods
--cfg.DATA.MEAN = [0.485, 0.456, 0.406]
--cfg.DATA.STD = [0.229, 0.224, 0.225]
--cfg.DATA.MAX_SAMPLE_INTERVAL = 200
--# DATA.TRAIN
--cfg.DATA.TRAIN = edict()
--cfg.DATA.TRAIN.DATASETS_NAME = ["LASOT", "GOT10K_vottrain"]
--cfg.DATA.TRAIN.DATASETS_RATIO = [1, 1]
-+cfg.TRAIN.GRAD_CLIP_NORM = 0.1
-+cfg.TRAIN.AMP = False
-+
-+cfg.TRAIN.CE_START_EPOCH = 20  # candidate elimination start epoch
-+cfg.TRAIN.CE_WARM_EPOCH = 80  # candidate elimination warm up epoch
-+cfg.TRAIN.DROP_PATH_RATE = 0.1  # drop path rate for ViT backbone
-+
-+# TRAIN.SCHEDULER
-+cfg.TRAIN.SCHEDULER = edict()
-+cfg.TRAIN.SCHEDULER.TYPE = "step"
-+cfg.TRAIN.SCHEDULER.DECAY_RATE = 0.1
-+
-+# DATA
-+cfg.DATA = edict()
-+cfg.DATA.SAMPLER_MODE = "causal"  # sampling methods
-+cfg.DATA.MEAN = [0.485, 0.456, 0.406]
-+cfg.DATA.STD = [0.229, 0.224, 0.225]
-+cfg.DATA.MAX_SAMPLE_INTERVAL = 200
-+# DATA.TRAIN
-+cfg.DATA.TRAIN = edict()
-+cfg.DATA.TRAIN.DATASETS_NAME = ["LASOT", "GOT10K_vottrain"]
-+cfg.DATA.TRAIN.DATASETS_RATIO = [1, 1]
- cfg.DATA.TRAIN.SAMPLE_PER_EPOCH = 60000
- # DATA.VAL
- cfg.DATA.VAL = edict()
- cfg.DATA.VAL.DATASETS_NAME = ["GOT10K_votval"]
- cfg.DATA.VAL.DATASETS_RATIO = [1]
- cfg.DATA.VAL.SAMPLE_PER_EPOCH = 10000
-+# DATA.DEGRADATION
-+# Training-side synthetic degradation. Disabled by default so baseline
-+# OSTrack data processing is unchanged.
-+cfg.DATA.DEGRADATION = edict()
-+cfg.DATA.DEGRADATION.ENABLE = False
-+cfg.DATA.DEGRADATION.PROBABILITY = 0.0
-+cfg.DATA.DEGRADATION.APPLY_TO = "search_only"
-+cfg.DATA.DEGRADATION.TYPES = ["motion_blur", "low_resolution"]
-+cfg.DATA.DEGRADATION.SEVERITY = "medium"
-+cfg.DATA.DEGRADATION.SEED = 42
- # DATA.SEARCH
- cfg.DATA.SEARCH = edict()
--cfg.DATA.SEARCH.SIZE = 320
--cfg.DATA.SEARCH.FACTOR = 5.0
--cfg.DATA.SEARCH.CENTER_JITTER = 4.5
--cfg.DATA.SEARCH.SCALE_JITTER = 0.5
--cfg.DATA.SEARCH.NUMBER = 1
--# DATA.TEMPLATE
--cfg.DATA.TEMPLATE = edict()
--cfg.DATA.TEMPLATE.NUMBER = 1
--cfg.DATA.TEMPLATE.SIZE = 128
--cfg.DATA.TEMPLATE.FACTOR = 2.0
--cfg.DATA.TEMPLATE.CENTER_JITTER = 0
--cfg.DATA.TEMPLATE.SCALE_JITTER = 0
--
--# TEST
--cfg.TEST = edict()
--cfg.TEST.TEMPLATE_FACTOR = 2.0
--cfg.TEST.TEMPLATE_SIZE = 128
--cfg.TEST.SEARCH_FACTOR = 5.0
--cfg.TEST.SEARCH_SIZE = 320
--cfg.TEST.EPOCH = 500
--
--
--def _edict2dict(dest_dict, src_edict):
--    if isinstance(dest_dict, dict) and isinstance(src_edict, dict):
--        for k, v in src_edict.items():
--            if not isinstance(v, edict):
--                dest_dict[k] = v
--            else:
--                dest_dict[k] = {}
--                _edict2dict(dest_dict[k], v)
--    else:
--        return
--
--
--def gen_config(config_file):
--    cfg_dict = {}
--    _edict2dict(cfg_dict, cfg)
--    with open(config_file, 'w') as f:
--        yaml.dump(cfg_dict, f, default_flow_style=False)
--
--
--def _update_config(base_cfg, exp_cfg):
--    if isinstance(base_cfg, dict) and isinstance(exp_cfg, edict):
--        for k, v in exp_cfg.items():
--            if k in base_cfg:
--                if not isinstance(v, dict):
--                    base_cfg[k] = v
--                else:
--                    _update_config(base_cfg[k], v)
--            else:
--                raise ValueError("{} not exist in config.py".format(k))
--    else:
--        return
--
--
--def update_config_from_file(filename, base_cfg=None):
--    exp_config = None
--    with open(filename) as f:
--        exp_config = edict(yaml.safe_load(f))
--        if base_cfg is not None:
--            _update_config(base_cfg, exp_config)
--        else:
--            _update_config(cfg, exp_config)
-+cfg.DATA.SEARCH.SIZE = 320
-+cfg.DATA.SEARCH.FACTOR = 5.0
-+cfg.DATA.SEARCH.CENTER_JITTER = 4.5
-+cfg.DATA.SEARCH.SCALE_JITTER = 0.5
-+cfg.DATA.SEARCH.NUMBER = 1
-+# DATA.TEMPLATE
-+cfg.DATA.TEMPLATE = edict()
-+cfg.DATA.TEMPLATE.NUMBER = 1
-+cfg.DATA.TEMPLATE.SIZE = 128
-+cfg.DATA.TEMPLATE.FACTOR = 2.0
-+cfg.DATA.TEMPLATE.CENTER_JITTER = 0
-+cfg.DATA.TEMPLATE.SCALE_JITTER = 0
-+
-+# TEST
-+cfg.TEST = edict()
-+cfg.TEST.TEMPLATE_FACTOR = 2.0
-+cfg.TEST.TEMPLATE_SIZE = 128
-+cfg.TEST.SEARCH_FACTOR = 5.0
-+cfg.TEST.SEARCH_SIZE = 320
-+cfg.TEST.EPOCH = 500
-+
-+
-+def _edict2dict(dest_dict, src_edict):
-+    if isinstance(dest_dict, dict) and isinstance(src_edict, dict):
-+        for k, v in src_edict.items():
-+            if not isinstance(v, edict):
-+                dest_dict[k] = v
-+            else:
-+                dest_dict[k] = {}
-+                _edict2dict(dest_dict[k], v)
-+    else:
-+        return
-+
-+
-+def gen_config(config_file):
-+    cfg_dict = {}
-+    _edict2dict(cfg_dict, cfg)
-+    with open(config_file, 'w') as f:
-+        yaml.dump(cfg_dict, f, default_flow_style=False)
-+
-+
-+def _update_config(base_cfg, exp_cfg):
-+    if isinstance(base_cfg, dict) and isinstance(exp_cfg, edict):
-+        for k, v in exp_cfg.items():
-+            if k in base_cfg:
-+                if not isinstance(v, dict):
-+                    base_cfg[k] = v
-+                else:
-+                    _update_config(base_cfg[k], v)
-+            else:
-+                raise ValueError("{} not exist in config.py".format(k))
-+    else:
-+        return
-+
-+
-+def update_config_from_file(filename, base_cfg=None):
-+    exp_config = None
-+    with open(filename) as f:
-+        exp_config = edict(yaml.safe_load(f))
-+        if base_cfg is not None:
-+            _update_config(base_cfg, exp_config)
-+        else:
-+            _update_config(cfg, exp_config)
-diff --git a/lib/models/ostrack/ostrack.py b/lib/models/ostrack/ostrack.py
-index 406d8e9..0a36b86 100644
---- a/lib/models/ostrack/ostrack.py
-+++ b/lib/models/ostrack/ostrack.py
-@@ -7,42 +7,60 @@ from typing import List
- 
- import torch
- from torch import nn
+-import torch
+-from torch import nn
 -from torch.nn.modules.transformer import _get_clones
 -
 -from lib.models.layers.head import build_box_head
 -from lib.models.ostrack.vit import vit_base_patch16_224
 -from lib.models.ostrack.vit_ce import vit_large_patch16_224_ce, vit_base_patch16_224_ce
 -from lib.utils.box_ops import box_xyxy_to_cxcywh
-+from torch.nn.modules.transformer import _get_clones
-+
-+from lib.models.layers.head import build_box_head
-+from lib.models.layers.rgssb import RestorationGuidedSSB
-+from lib.models.ostrack.vit import vit_base_patch16_224
-+from lib.models.ostrack.vit_ce import vit_large_patch16_224_ce, vit_base_patch16_224_ce
-+from lib.utils.box_ops import box_xyxy_to_cxcywh
- 
- 
- class OSTrack(nn.Module):
-     """ This is the base class for OSTrack """
- 
+-
+-
+-class OSTrack(nn.Module):
+-    """ This is the base class for OSTrack """
+-
 -    def __init__(self, transformer, box_head, aux_loss=False, head_type="CORNER"):
-+    def __init__(self, transformer, box_head, aux_loss=False, head_type="CORNER", cfg=None):
-         """ Initializes the model.
-         Parameters:
-             transformer: torch module of the transformer architecture.
-             aux_loss: True if auxiliary decoding losses (loss at each decoder layer) are to be used.
-         """
-         super().__init__()
+-        """ Initializes the model.
+-        Parameters:
+-            transformer: torch module of the transformer architecture.
+-            aux_loss: True if auxiliary decoding losses (loss at each decoder layer) are to be used.
+-        """
+-        super().__init__()
 -        self.backbone = transformer
 -        self.box_head = box_head
 -
 -        self.aux_loss = aux_loss
 -        self.head_type = head_type
-+        self.backbone = transformer
-+        self.box_head = box_head
-+        self.cfg = cfg
-+
-+        self.aux_loss = aux_loss
-+        self.head_type = head_type
-         if head_type == "CORNER" or head_type == "CENTER":
-             self.feat_sz_s = int(box_head.feat_sz)
-             self.feat_len_s = int(box_head.feat_sz ** 2)
+-        if head_type == "CORNER" or head_type == "CENTER":
+-            self.feat_sz_s = int(box_head.feat_sz)
+-            self.feat_len_s = int(box_head.feat_sz ** 2)
 -
 -        if self.aux_loss:
 -            self.box_head = _get_clones(self.box_head, 6)
@@ -1747,6 +109,142 @@ index 406d8e9..0a36b86 100644
 -                ce_keep_rate=None,
 -                return_last_attn=False,
 -                ):
+-        x, aux_dict = self.backbone(z=template, x=search,
+-                                    ce_template_mask=ce_template_mask,
+-                                    ce_keep_rate=ce_keep_rate,
+-                                    return_last_attn=return_last_attn, )
+-
+-        # Forward head
+-        feat_last = x
+-        if isinstance(x, list):
+-            feat_last = x[-1]
+-        out = self.forward_head(feat_last, None)
+-
+-        out.update(aux_dict)
+-        out['backbone_feat'] = x
+-        return out
+-
+-    def forward_head(self, cat_feature, gt_score_map=None):
+-        """
+-        cat_feature: output embeddings of the backbone, it can be (HW1+HW2, B, C) or (HW2, B, C)
+-        """
+-        enc_opt = cat_feature[:, -self.feat_len_s:]  # encoder output for the search region (B, HW, C)
+-        opt = (enc_opt.unsqueeze(-1)).permute((0, 3, 2, 1)).contiguous()
+-        bs, Nq, C, HW = opt.size()
+-        opt_feat = opt.view(-1, C, self.feat_sz_s, self.feat_sz_s)
+-
+-        if self.head_type == "CORNER":
+-            # run the corner head
+-            pred_box, score_map = self.box_head(opt_feat, True)
+-            outputs_coord = box_xyxy_to_cxcywh(pred_box)
+-            outputs_coord_new = outputs_coord.view(bs, Nq, 4)
+-            out = {'pred_boxes': outputs_coord_new,
+-                   'score_map': score_map,
+-                   }
+-            return out
+-
+-        elif self.head_type == "CENTER":
+-            # run the center head
+-            score_map_ctr, bbox, size_map, offset_map = self.box_head(opt_feat, gt_score_map)
+-            # outputs_coord = box_xyxy_to_cxcywh(bbox)
+-            outputs_coord = bbox
+-            outputs_coord_new = outputs_coord.view(bs, Nq, 4)
+-            out = {'pred_boxes': outputs_coord_new,
+-                   'score_map': score_map_ctr,
+-                   'size_map': size_map,
+-                   'offset_map': offset_map}
+-            return out
+-        else:
+-            raise NotImplementedError
+-
+-
+-def build_ostrack(cfg, training=True):
+-    current_dir = os.path.dirname(os.path.abspath(__file__))  # This is your Project Root
+-    pretrained_path = os.path.join(current_dir, '../../../pretrained_models')
+-    if cfg.MODEL.PRETRAIN_FILE and ('OSTrack' not in cfg.MODEL.PRETRAIN_FILE) and training:
+-        pretrained = os.path.join(pretrained_path, cfg.MODEL.PRETRAIN_FILE)
+-    else:
+-        pretrained = ''
+-
+-    if cfg.MODEL.BACKBONE.TYPE == 'vit_base_patch16_224':
+-        backbone = vit_base_patch16_224(pretrained, drop_path_rate=cfg.TRAIN.DROP_PATH_RATE)
+-        hidden_dim = backbone.embed_dim
+-        patch_start_index = 1
+-
+-    elif cfg.MODEL.BACKBONE.TYPE == 'vit_base_patch16_224_ce':
+-        backbone = vit_base_patch16_224_ce(pretrained, drop_path_rate=cfg.TRAIN.DROP_PATH_RATE,
+-                                           ce_loc=cfg.MODEL.BACKBONE.CE_LOC,
+-                                           ce_keep_ratio=cfg.MODEL.BACKBONE.CE_KEEP_RATIO,
+-                                           )
+-        hidden_dim = backbone.embed_dim
+-        patch_start_index = 1
+-
+-    elif cfg.MODEL.BACKBONE.TYPE == 'vit_large_patch16_224_ce':
+-        backbone = vit_large_patch16_224_ce(pretrained, drop_path_rate=cfg.TRAIN.DROP_PATH_RATE,
+-                                            ce_loc=cfg.MODEL.BACKBONE.CE_LOC,
+-                                            ce_keep_ratio=cfg.MODEL.BACKBONE.CE_KEEP_RATIO,
+-                                            )
+-
+-        hidden_dim = backbone.embed_dim
+-        patch_start_index = 1
+-
+-    else:
+-        raise NotImplementedError
+-
+-    backbone.finetune_track(cfg=cfg, patch_start_index=patch_start_index)
+-
+-    box_head = build_box_head(cfg, hidden_dim)
+-
+-    model = OSTrack(
+-        backbone,
+-        box_head,
+-        aux_loss=False,
+-        head_type=cfg.MODEL.HEAD.TYPE,
+-    )
+-
+-    if 'OSTrack' in cfg.MODEL.PRETRAIN_FILE and training:
+-        checkpoint = torch.load(cfg.MODEL.PRETRAIN_FILE, map_location="cpu")
+-        missing_keys, unexpected_keys = model.load_state_dict(checkpoint["net"], strict=False)
+-        print('Load pretrained model from: ' + cfg.MODEL.PRETRAIN_FILE)
+-
+-    return model
++"""
++Basic OSTrack model.
++"""
++import math
++import os
++from typing import List
++
++import torch
++from torch import nn
++from torch.nn.modules.transformer import _get_clones
++
++from lib.models.layers.head import build_box_head
++from lib.models.layers.rgssb import RestorationGuidedSSB
++from lib.models.ostrack.vit import vit_base_patch16_224
++from lib.models.ostrack.vit_ce import vit_large_patch16_224_ce, vit_base_patch16_224_ce
++from lib.utils.box_ops import box_xyxy_to_cxcywh
++
++
++class OSTrack(nn.Module):
++    """ This is the base class for OSTrack """
++
++    def __init__(self, transformer, box_head, aux_loss=False, head_type="CORNER", cfg=None):
++        """ Initializes the model.
++        Parameters:
++            transformer: torch module of the transformer architecture.
++            aux_loss: True if auxiliary decoding losses (loss at each decoder layer) are to be used.
++        """
++        super().__init__()
++        self.backbone = transformer
++        self.box_head = box_head
++        self.cfg = cfg
++
++        self.aux_loss = aux_loss
++        self.head_type = head_type
++        if head_type == "CORNER" or head_type == "CENTER":
++            self.feat_sz_s = int(box_head.feat_sz)
++            self.feat_len_s = int(box_head.feat_sz ** 2)
 +
 +        if self.aux_loss:
 +            self.box_head = _get_clones(self.box_head, 6)
@@ -1773,26 +271,21 @@ index 406d8e9..0a36b86 100644
 +                return_last_attn=False,
 +                return_search_features=False,
 +                ):
-         x, aux_dict = self.backbone(z=template, x=search,
-                                     ce_template_mask=ce_template_mask,
-                                     ce_keep_rate=ce_keep_rate,
-@@ -52,18 +70,21 @@ class OSTrack(nn.Module):
-         feat_last = x
-         if isinstance(x, list):
-             feat_last = x[-1]
--        out = self.forward_head(feat_last, None)
++        x, aux_dict = self.backbone(z=template, x=search,
++                                    ce_template_mask=ce_template_mask,
++                                    ce_keep_rate=ce_keep_rate,
++                                    return_last_attn=return_last_attn, )
++
++        # Forward head
++        feat_last = x
++        if isinstance(x, list):
++            feat_last = x[-1]
 +        out = self.forward_head(feat_last, None, return_search_features=return_search_features)
- 
-         out.update(aux_dict)
-         out['backbone_feat'] = x
-         return out
- 
--    def forward_head(self, cat_feature, gt_score_map=None):
--        """
--        cat_feature: output embeddings of the backbone, it can be (HW1+HW2, B, C) or (HW2, B, C)
--        """
--        enc_opt = cat_feature[:, -self.feat_len_s:]  # encoder output for the search region (B, HW, C)
--        opt = (enc_opt.unsqueeze(-1)).permute((0, 3, 2, 1)).contiguous()
++
++        out.update(aux_dict)
++        out['backbone_feat'] = x
++        return out
++
 +    def forward_head(self, cat_feature, gt_score_map=None, return_search_features=False):
 +        """
 +        cat_feature: output embeddings of the backbone, it can be (HW1+HW2, B, C) or (HW2, B, C)
@@ -1802,35 +295,27 @@ index 406d8e9..0a36b86 100644
 +            enc_opt = self.rgssb(enc_opt, search_len=self.feat_len_s, spatial_size=(self.feat_sz_s, self.feat_sz_s))
 +        search_feat_rgssb = enc_opt
 +        opt = (enc_opt.unsqueeze(-1)).permute((0, 3, 2, 1)).contiguous()
-         bs, Nq, C, HW = opt.size()
-         opt_feat = opt.view(-1, C, self.feat_sz_s, self.feat_sz_s)
- 
-@@ -72,10 +93,12 @@ class OSTrack(nn.Module):
-             pred_box, score_map = self.box_head(opt_feat, True)
-             outputs_coord = box_xyxy_to_cxcywh(pred_box)
-             outputs_coord_new = outputs_coord.view(bs, Nq, 4)
--            out = {'pred_boxes': outputs_coord_new,
--                   'score_map': score_map,
--                   }
--            return out
++        bs, Nq, C, HW = opt.size()
++        opt_feat = opt.view(-1, C, self.feat_sz_s, self.feat_sz_s)
++
++        if self.head_type == "CORNER":
++            # run the corner head
++            pred_box, score_map = self.box_head(opt_feat, True)
++            outputs_coord = box_xyxy_to_cxcywh(pred_box)
++            outputs_coord_new = outputs_coord.view(bs, Nq, 4)
 +            out = {'pred_boxes': outputs_coord_new,
 +                   'score_map': score_map,
 +                   }
 +            if return_search_features:
 +                out['search_feat_rgssb'] = search_feat_rgssb
 +            return out
- 
-         elif self.head_type == "CENTER":
-             # run the center head
-@@ -83,11 +106,13 @@ class OSTrack(nn.Module):
-             # outputs_coord = box_xyxy_to_cxcywh(bbox)
-             outputs_coord = bbox
-             outputs_coord_new = outputs_coord.view(bs, Nq, 4)
--            out = {'pred_boxes': outputs_coord_new,
--                   'score_map': score_map_ctr,
--                   'size_map': size_map,
--                   'offset_map': offset_map}
--            return out
++
++        elif self.head_type == "CENTER":
++            # run the center head
++            score_map_ctr, bbox, size_map, offset_map = self.box_head(opt_feat, gt_score_map)
++            # outputs_coord = box_xyxy_to_cxcywh(bbox)
++            outputs_coord = bbox
++            outputs_coord_new = outputs_coord.view(bs, Nq, 4)
 +            out = {'pred_boxes': outputs_coord_new,
 +                   'score_map': score_map_ctr,
 +                   'size_map': size_map,
@@ -1838,25 +323,48 @@ index 406d8e9..0a36b86 100644
 +            if return_search_features:
 +                out['search_feat_rgssb'] = search_feat_rgssb
 +            return out
-         else:
-             raise NotImplementedError
- 
-@@ -130,15 +155,21 @@ def build_ostrack(cfg, training=True):
-     box_head = build_box_head(cfg, hidden_dim)
- 
-     model = OSTrack(
--        backbone,
--        box_head,
--        aux_loss=False,
--        head_type=cfg.MODEL.HEAD.TYPE,
--    )
--
--    if 'OSTrack' in cfg.MODEL.PRETRAIN_FILE and training:
--        checkpoint = torch.load(cfg.MODEL.PRETRAIN_FILE, map_location="cpu")
--        missing_keys, unexpected_keys = model.load_state_dict(checkpoint["net"], strict=False)
--        print('Load pretrained model from: ' + cfg.MODEL.PRETRAIN_FILE)
--
--    return model
++        else:
++            raise NotImplementedError
++
++
++def build_ostrack(cfg, training=True):
++    current_dir = os.path.dirname(os.path.abspath(__file__))  # This is your Project Root
++    pretrained_path = os.path.join(current_dir, '../../../pretrained_models')
++    if cfg.MODEL.PRETRAIN_FILE and ('OSTrack' not in cfg.MODEL.PRETRAIN_FILE) and training:
++        pretrained = os.path.join(pretrained_path, cfg.MODEL.PRETRAIN_FILE)
++    else:
++        pretrained = ''
++
++    if cfg.MODEL.BACKBONE.TYPE == 'vit_base_patch16_224':
++        backbone = vit_base_patch16_224(pretrained, drop_path_rate=cfg.TRAIN.DROP_PATH_RATE)
++        hidden_dim = backbone.embed_dim
++        patch_start_index = 1
++
++    elif cfg.MODEL.BACKBONE.TYPE == 'vit_base_patch16_224_ce':
++        backbone = vit_base_patch16_224_ce(pretrained, drop_path_rate=cfg.TRAIN.DROP_PATH_RATE,
++                                           ce_loc=cfg.MODEL.BACKBONE.CE_LOC,
++                                           ce_keep_ratio=cfg.MODEL.BACKBONE.CE_KEEP_RATIO,
++                                           )
++        hidden_dim = backbone.embed_dim
++        patch_start_index = 1
++
++    elif cfg.MODEL.BACKBONE.TYPE == 'vit_large_patch16_224_ce':
++        backbone = vit_large_patch16_224_ce(pretrained, drop_path_rate=cfg.TRAIN.DROP_PATH_RATE,
++                                            ce_loc=cfg.MODEL.BACKBONE.CE_LOC,
++                                            ce_keep_ratio=cfg.MODEL.BACKBONE.CE_KEEP_RATIO,
++                                            )
++
++        hidden_dim = backbone.embed_dim
++        patch_start_index = 1
++
++    else:
++        raise NotImplementedError
++
++    backbone.finetune_track(cfg=cfg, patch_start_index=patch_start_index)
++
++    box_head = build_box_head(cfg, hidden_dim)
++
++    model = OSTrack(
 +        backbone,
 +        box_head,
 +        aux_loss=False,
@@ -1875,147 +383,57 @@ index 406d8e9..0a36b86 100644
 +            print("unexpected keys: ", unexpected_keys)
 +
 +    return model
+diff --git a/lib/test/tracker/ostrack.py b/lib/test/tracker/ostrack.py
+index 3674779..c6723d6 100644
+--- a/lib/test/tracker/ostrack.py
++++ b/lib/test/tracker/ostrack.py
+@@ -20,7 +20,16 @@ class OSTrack(BaseTracker):
+     def __init__(self, params, dataset_name):
+         super(OSTrack, self).__init__(params)
+         network = build_ostrack(params.cfg, training=False)
+-        network.load_state_dict(torch.load(self.params.checkpoint, map_location='cpu')['net'], strict=True)
++        checkpoint = torch.load(self.params.checkpoint, map_location='cpu')['net']
++        rgssb_enabled = bool(getattr(getattr(params.cfg.MODEL, "RGSSB", None), "ENABLE", False))
++        if rgssb_enabled:
++            missing_keys, unexpected_keys = network.load_state_dict(checkpoint, strict=False)
++            print("RG-SSB debug config enabled: loading OSTrack checkpoint with strict=False.")
++            print("Missing keys:", missing_keys)
++            print("Unexpected keys:", unexpected_keys)
++            print("Missing rgssb.* keys are expected for an untrained RG-SSB debug module.")
++        else:
++            network.load_state_dict(checkpoint, strict=True)
+         self.cfg = params.cfg
+         self.network = network.cuda()
+         self.network.eval()
 diff --git a/lib/train/actors/ostrack.py b/lib/train/actors/ostrack.py
-index 36d1341..8ae73ca 100644
+index 36d1341..5d40428 100644
 --- a/lib/train/actors/ostrack.py
 +++ b/lib/train/actors/ostrack.py
-@@ -1,115 +1,174 @@
--from . import BaseActor
--from lib.utils.misc import NestedTensor
--from lib.utils.box_ops import box_cxcywh_to_xyxy, box_xywh_to_xyxy
-+from . import BaseActor
-+from lib.utils.misc import NestedTensor
-+from lib.utils.box_ops import box_cxcywh_to_xyxy, box_xywh_to_xyxy
+@@ -2,6 +2,7 @@ from . import BaseActor
+ from lib.utils.misc import NestedTensor
+ from lib.utils.box_ops import box_cxcywh_to_xyxy, box_xywh_to_xyxy
  import torch
 +import torch.nn.functional as F
  from lib.utils.merge import merge_template_search
--from ...utils.heapmap_utils import generate_heatmap
--from ...utils.ce_utils import generate_mask_cond, adjust_keep_rate
--
--
--class OSTrackActor(BaseActor):
--    """ Actor for training OSTrack models """
--
--    def __init__(self, net, objective, loss_weight, settings, cfg=None):
--        super().__init__(net, objective)
--        self.loss_weight = loss_weight
-+from ...utils.heapmap_utils import generate_heatmap
-+from ...utils.ce_utils import generate_mask_cond, adjust_keep_rate
-+
-+
-+class OSTrackActor(BaseActor):
-+    """ Actor for training OSTrack models """
-+
-+    def __init__(self, net, objective, loss_weight, settings, cfg=None):
-+        super().__init__(net, objective)
-+        self.loss_weight = loss_weight
+ from ...utils.heapmap_utils import generate_heatmap
+ from ...utils.ce_utils import generate_mask_cond, adjust_keep_rate
+@@ -16,6 +17,15 @@ class OSTrackActor(BaseActor):
          self.settings = settings
          self.bs = self.settings.batchsize  # batch size
          self.cfg = cfg
--
--    def __call__(self, data):
--        """
--        args:
--            data - The input data, should contain the fields 'template', 'search', 'gt_bbox'.
--            template_images: (N_t, batch, 3, H, W)
--            search_images: (N_s, batch, 3, H, W)
--        returns:
--            loss    - the training loss
--            status  -  dict containing detailed losses
--        """
--        # forward pass
--        out_dict = self.forward_pass(data)
--
--        # compute losses
--        loss, status = self.compute_losses(out_dict, data)
--
--        return loss, status
--
--    def forward_pass(self, data):
--        # currently only support 1 template and 1 search region
--        assert len(data['template_images']) == 1
--        assert len(data['search_images']) == 1
--
--        template_list = []
--        for i in range(self.settings.num_template):
--            template_img_i = data['template_images'][i].view(-1,
--                                                             *data['template_images'].shape[2:])  # (batch, 3, 128, 128)
--            # template_att_i = data['template_att'][i].view(-1, *data['template_att'].shape[2:])  # (batch, 128, 128)
--            template_list.append(template_img_i)
--
 +        self.feature_consistency_cfg = getattr(cfg.TRAIN, "FEATURE_CONSISTENCY", None) if cfg is not None else None
 +        self.feature_consistency_enabled = bool(
 +            getattr(self.feature_consistency_cfg, "ENABLE", False)
 +        ) if self.feature_consistency_cfg is not None else False
-+
-+    def __call__(self, data):
-+        """
-+        args:
-+            data - The input data, should contain the fields 'template', 'search', 'gt_bbox'.
-+            template_images: (N_t, batch, 3, H, W)
-+            search_images: (N_s, batch, 3, H, W)
-+        returns:
-+            loss    - the training loss
-+            status  -  dict containing detailed losses
-+        """
-+        # forward pass
-+        out_dict = self.forward_pass(data)
-+
-+        # compute losses
-+        loss, status = self.compute_losses(out_dict, data)
-+
-+        return loss, status
-+
-+    def forward_pass(self, data):
-+        # currently only support 1 template and 1 search region
-+        assert len(data['template_images']) == 1
-+        assert len(data['search_images']) == 1
-+
-+        template_list = []
-+        for i in range(self.settings.num_template):
-+            template_img_i = data['template_images'][i].view(-1,
-+                                                             *data['template_images'].shape[2:])  # (batch, 3, 128, 128)
-+            # template_att_i = data['template_att'][i].view(-1, *data['template_att'].shape[2:])  # (batch, 128, 128)
-+            template_list.append(template_img_i)
-+
-         search_img = data['search_images'][0].view(-1, *data['search_images'].shape[2:])  # (batch, 3, 320, 320)
--        # search_att = data['search_att'][0].view(-1, *data['search_att'].shape[2:])  # (batch, 320, 320)
--
--        box_mask_z = None
--        ce_keep_rate = None
--        if self.cfg.MODEL.BACKBONE.CE_LOC:
--            box_mask_z = generate_mask_cond(self.cfg, template_list[0].shape[0], template_list[0].device,
--                                            data['template_anno'][0])
--
--            ce_start_epoch = self.cfg.TRAIN.CE_START_EPOCH
--            ce_warm_epoch = self.cfg.TRAIN.CE_WARM_EPOCH
--            ce_keep_rate = adjust_keep_rate(data['epoch'], warmup_epochs=ce_start_epoch,
--                                                total_epochs=ce_start_epoch + ce_warm_epoch,
--                                                ITERS_PER_EPOCH=1,
--                                                base_keep_rate=self.cfg.MODEL.BACKBONE.CE_KEEP_RATIO[0])
--
--        if len(template_list) == 1:
--            template_list = template_list[0]
--
-+        # search_att = data['search_att'][0].view(-1, *data['search_att'].shape[2:])  # (batch, 320, 320)
-+
-+        box_mask_z = None
-+        ce_keep_rate = None
-+        if self.cfg.MODEL.BACKBONE.CE_LOC:
-+            box_mask_z = generate_mask_cond(self.cfg, template_list[0].shape[0], template_list[0].device,
-+                                            data['template_anno'][0])
-+
-+            ce_start_epoch = self.cfg.TRAIN.CE_START_EPOCH
-+            ce_warm_epoch = self.cfg.TRAIN.CE_WARM_EPOCH
-+            ce_keep_rate = adjust_keep_rate(data['epoch'], warmup_epochs=ce_start_epoch,
-+                                                total_epochs=ce_start_epoch + ce_warm_epoch,
-+                                                ITERS_PER_EPOCH=1,
-+                                                base_keep_rate=self.cfg.MODEL.BACKBONE.CE_KEEP_RATIO[0])
-+
-+        if len(template_list) == 1:
-+            template_list = template_list[0]
-+
-         out_dict = self.net(template=template_list,
++        self.response_consistency_cfg = getattr(cfg.TRAIN, "RESPONSE_CONSISTENCY", None) if cfg is not None else None
++        self.response_consistency_enabled = bool(
++            getattr(self.response_consistency_cfg, "ENABLE", False)
++        ) if self.response_consistency_cfg is not None else False
++        self.clean_branch_enabled = self.feature_consistency_enabled or self.response_consistency_enabled
+ 
+     def __call__(self, data):
+         """
+@@ -70,7 +80,47 @@ class OSTrackActor(BaseActor):
                              search=search_img,
                              ce_template_mask=box_mask_z,
                              ce_keep_rate=ce_keep_rate,
@@ -2023,11 +441,19 @@ index 36d1341..8ae73ca 100644
 +                            return_last_attn=False,
 +                            return_search_features=self.feature_consistency_enabled)
 +
-+        if self.feature_consistency_enabled:
++        if self.clean_branch_enabled:
 +            if 'search_images_clean' not in data:
-+                raise KeyError("Feature consistency requires data['search_images_clean'].")
++                available_keys = sorted(list(data.keys())) if hasattr(data, "keys") else []
++                raise KeyError(
++                    "Clean/degraded consistency requires data['search_images_clean']. "
++                    "Available data keys: {}".format(available_keys)
++                )
 +            search_clean_img = data['search_images_clean'][0].view(-1, *data['search_images_clean'].shape[2:])
-+            detach_clean = bool(getattr(self.feature_consistency_cfg, "DETACH_CLEAN", True))
++            detach_clean = bool(
++                getattr(self.feature_consistency_cfg, "DETACH_CLEAN", True)
++                if self.feature_consistency_enabled
++                else getattr(self.response_consistency_cfg, "DETACH_CLEAN", True)
++            )
 +            if detach_clean:
 +                with torch.no_grad():
 +                    clean_out = self.net(template=template_list,
@@ -2035,89 +461,50 @@ index 36d1341..8ae73ca 100644
 +                                         ce_template_mask=box_mask_z,
 +                                         ce_keep_rate=ce_keep_rate,
 +                                         return_last_attn=False,
-+                                         return_search_features=True)
++                                         return_search_features=self.feature_consistency_enabled)
 +            else:
 +                clean_out = self.net(template=template_list,
 +                                     search=search_clean_img,
 +                                     ce_template_mask=box_mask_z,
 +                                     ce_keep_rate=ce_keep_rate,
 +                                     return_last_attn=False,
-+                                     return_search_features=True)
-+            out_dict['search_feat_rgssb_clean'] = clean_out['search_feat_rgssb']
++                                     return_search_features=self.feature_consistency_enabled)
++            if self.feature_consistency_enabled:
++                out_dict['search_feat_rgssb_clean'] = clean_out['search_feat_rgssb']
++            if self.response_consistency_enabled:
++                if 'score_map' not in clean_out:
++                    available_keys = sorted(list(clean_out.keys()))
++                    raise KeyError(
++                        "Response consistency requires clean_out['score_map']. "
++                        "Available output keys: {}".format(available_keys)
++                    )
++                out_dict['score_map_clean'] = clean_out['score_map']
  
          return out_dict
--
--    def compute_losses(self, pred_dict, gt_dict, return_status=True):
--        # gt gaussian map
--        gt_bbox = gt_dict['search_anno'][-1]  # (Ns, batch, 4) (x1,y1,w,h) -> (batch, 4)
--        gt_gaussian_maps = generate_heatmap(gt_dict['search_anno'], self.cfg.DATA.SEARCH.SIZE, self.cfg.MODEL.BACKBONE.STRIDE)
--        gt_gaussian_maps = gt_gaussian_maps[-1].unsqueeze(1)
--
--        # Get boxes
--        pred_boxes = pred_dict['pred_boxes']
--        if torch.isnan(pred_boxes).any():
--            raise ValueError("Network outputs is NAN! Stop Training")
--        num_queries = pred_boxes.size(1)
--        pred_boxes_vec = box_cxcywh_to_xyxy(pred_boxes).view(-1, 4)  # (B,N,4) --> (BN,4) (x1,y1,x2,y2)
--        gt_boxes_vec = box_xywh_to_xyxy(gt_bbox)[:, None, :].repeat((1, num_queries, 1)).view(-1, 4).clamp(min=0.0,
--                                                                                                           max=1.0)  # (B,4) --> (B,1,4) --> (B,N,4)
--        # compute giou and iou
--        try:
--            giou_loss, iou = self.objective['giou'](pred_boxes_vec, gt_boxes_vec)  # (BN,4) (BN,4)
--        except:
--            giou_loss, iou = torch.tensor(0.0).cuda(), torch.tensor(0.0).cuda()
--        # compute l1 loss
--        l1_loss = self.objective['l1'](pred_boxes_vec, gt_boxes_vec)  # (BN,4) (BN,4)
--        # compute location loss
--        if 'score_map' in pred_dict:
--            location_loss = self.objective['focal'](pred_dict['score_map'], gt_gaussian_maps)
--        else:
--            location_loss = torch.tensor(0.0, device=l1_loss.device)
-+
-+    def compute_losses(self, pred_dict, gt_dict, return_status=True):
-+        # gt gaussian map
-+        gt_bbox = gt_dict['search_anno'][-1]  # (Ns, batch, 4) (x1,y1,w,h) -> (batch, 4)
-+        gt_gaussian_maps = generate_heatmap(gt_dict['search_anno'], self.cfg.DATA.SEARCH.SIZE, self.cfg.MODEL.BACKBONE.STRIDE)
-+        gt_gaussian_maps = gt_gaussian_maps[-1].unsqueeze(1)
-+
-+        # Get boxes
-+        pred_boxes = pred_dict['pred_boxes']
-+        if torch.isnan(pred_boxes).any():
-+            raise ValueError("Network outputs is NAN! Stop Training")
-+        num_queries = pred_boxes.size(1)
-+        pred_boxes_vec = box_cxcywh_to_xyxy(pred_boxes).view(-1, 4)  # (B,N,4) --> (BN,4) (x1,y1,x2,y2)
-+        gt_boxes_vec = box_xywh_to_xyxy(gt_bbox)[:, None, :].repeat((1, num_queries, 1)).view(-1, 4).clamp(min=0.0,
-+                                                                                                           max=1.0)  # (B,4) --> (B,1,4) --> (B,N,4)
-+        # compute giou and iou
-+        try:
-+            giou_loss, iou = self.objective['giou'](pred_boxes_vec, gt_boxes_vec)  # (BN,4) (BN,4)
-+        except:
-+            giou_loss, iou = torch.tensor(0.0).cuda(), torch.tensor(0.0).cuda()
-+        # compute l1 loss
-+        l1_loss = self.objective['l1'](pred_boxes_vec, gt_boxes_vec)  # (BN,4) (BN,4)
-+        # compute location loss
-+        if 'score_map' in pred_dict:
-+            location_loss = self.objective['focal'](pred_dict['score_map'], gt_gaussian_maps)
-+        else:
-+            location_loss = torch.tensor(0.0, device=l1_loss.device)
+ 
+@@ -102,6 +152,14 @@ class OSTrackActor(BaseActor):
+             location_loss = torch.tensor(0.0, device=l1_loss.device)
          # weighted sum
          loss = self.loss_weight['giou'] * giou_loss + self.loss_weight['l1'] * l1_loss + self.loss_weight['focal'] * location_loss
 +        feature_loss = None
 +        if self.feature_consistency_enabled:
 +            feature_loss = self.compute_feature_consistency_loss(pred_dict)
 +            loss = loss + float(self.feature_consistency_cfg.WEIGHT) * feature_loss
++        response_loss = None
++        if self.response_consistency_enabled:
++            response_loss = self.compute_response_consistency_loss(pred_dict)
++            loss = loss + float(self.response_consistency_cfg.WEIGHT) * response_loss
          if return_status:
--            # status for log
--            mean_iou = iou.detach().mean()
-+            # status for log
-+            mean_iou = iou.detach().mean()
-             status = {"Loss/total": loss.item(),
-                       "Loss/giou": giou_loss.item(),
+             # status for log
+             mean_iou = iou.detach().mean()
+@@ -110,6 +168,65 @@ class OSTrackActor(BaseActor):
                        "Loss/l1": l1_loss.item(),
                        "Loss/location": location_loss.item(),
                        "IoU": mean_iou.item()}
 +            if feature_loss is not None:
 +                status["Loss/feature_consistency"] = feature_loss.item()
++            if response_loss is not None:
++                status["Loss/response_consistency"] = response_loss.item()
              return loss, status
          else:
              return loss
@@ -2146,592 +533,6 @@ index 36d1341..8ae73ca 100644
 +        if not torch.isfinite(feature_loss):
 +            raise ValueError("Feature consistency loss is not finite.")
 +        return feature_loss
-diff --git a/lib/train/base_functions.py b/lib/train/base_functions.py
-index b581748..869687e 100644
---- a/lib/train/base_functions.py
-+++ b/lib/train/base_functions.py
-@@ -1,192 +1,200 @@
--import torch
--from torch.utils.data.distributed import DistributedSampler
--# datasets related
--from lib.train.dataset import Lasot, Got10k, MSCOCOSeq, ImagenetVID, TrackingNet
--from lib.train.dataset import Lasot_lmdb, Got10k_lmdb, MSCOCOSeq_lmdb, ImagenetVID_lmdb, TrackingNet_lmdb
-+import torch
-+from torch.utils.data.distributed import DistributedSampler
-+# datasets related
-+from lib.train.dataset import Lasot, Got10k, MSCOCOSeq, ImagenetVID, TrackingNet
-+from lib.train.dataset import Lasot_lmdb, Got10k_lmdb, MSCOCOSeq_lmdb, ImagenetVID_lmdb, TrackingNet_lmdb
- from lib.train.data import sampler, opencv_loader, processing, LTRLoader
- import lib.train.data.transforms as tfm
- from lib.utils.misc import is_main_process
--
--
--def update_settings(settings, cfg):
--    settings.print_interval = cfg.TRAIN.PRINT_INTERVAL
--    settings.search_area_factor = {'template': cfg.DATA.TEMPLATE.FACTOR,
--                                   'search': cfg.DATA.SEARCH.FACTOR}
--    settings.output_sz = {'template': cfg.DATA.TEMPLATE.SIZE,
--                          'search': cfg.DATA.SEARCH.SIZE}
--    settings.center_jitter_factor = {'template': cfg.DATA.TEMPLATE.CENTER_JITTER,
--                                     'search': cfg.DATA.SEARCH.CENTER_JITTER}
--    settings.scale_jitter_factor = {'template': cfg.DATA.TEMPLATE.SCALE_JITTER,
--                                    'search': cfg.DATA.SEARCH.SCALE_JITTER}
--    settings.grad_clip_norm = cfg.TRAIN.GRAD_CLIP_NORM
--    settings.print_stats = None
--    settings.batchsize = cfg.TRAIN.BATCH_SIZE
--    settings.scheduler_type = cfg.TRAIN.SCHEDULER.TYPE
--
--
--def names2datasets(name_list: list, settings, image_loader):
--    assert isinstance(name_list, list)
--    datasets = []
--    for name in name_list:
--        assert name in ["LASOT", "GOT10K_vottrain", "GOT10K_votval", "GOT10K_train_full", "GOT10K_official_val",
--                        "COCO17", "VID", "TRACKINGNET"]
--        if name == "LASOT":
--            if settings.use_lmdb:
--                print("Building lasot dataset from lmdb")
--                datasets.append(Lasot_lmdb(settings.env.lasot_lmdb_dir, split='train', image_loader=image_loader))
--            else:
--                datasets.append(Lasot(settings.env.lasot_dir, split='train', image_loader=image_loader))
--        if name == "GOT10K_vottrain":
--            if settings.use_lmdb:
--                print("Building got10k from lmdb")
--                datasets.append(Got10k_lmdb(settings.env.got10k_lmdb_dir, split='vottrain', image_loader=image_loader))
--            else:
--                datasets.append(Got10k(settings.env.got10k_dir, split='vottrain', image_loader=image_loader))
--        if name == "GOT10K_train_full":
--            if settings.use_lmdb:
--                print("Building got10k_train_full from lmdb")
--                datasets.append(Got10k_lmdb(settings.env.got10k_lmdb_dir, split='train_full', image_loader=image_loader))
--            else:
--                datasets.append(Got10k(settings.env.got10k_dir, split='train_full', image_loader=image_loader))
--        if name == "GOT10K_votval":
--            if settings.use_lmdb:
--                print("Building got10k from lmdb")
--                datasets.append(Got10k_lmdb(settings.env.got10k_lmdb_dir, split='votval', image_loader=image_loader))
--            else:
--                datasets.append(Got10k(settings.env.got10k_dir, split='votval', image_loader=image_loader))
--        if name == "GOT10K_official_val":
--            if settings.use_lmdb:
--                raise ValueError("Not implement")
--            else:
--                datasets.append(Got10k(settings.env.got10k_val_dir, split=None, image_loader=image_loader))
--        if name == "COCO17":
--            if settings.use_lmdb:
--                print("Building COCO2017 from lmdb")
--                datasets.append(MSCOCOSeq_lmdb(settings.env.coco_lmdb_dir, version="2017", image_loader=image_loader))
--            else:
--                datasets.append(MSCOCOSeq(settings.env.coco_dir, version="2017", image_loader=image_loader))
--        if name == "VID":
--            if settings.use_lmdb:
--                print("Building VID from lmdb")
--                datasets.append(ImagenetVID_lmdb(settings.env.imagenet_lmdb_dir, image_loader=image_loader))
--            else:
--                datasets.append(ImagenetVID(settings.env.imagenet_dir, image_loader=image_loader))
--        if name == "TRACKINGNET":
--            if settings.use_lmdb:
--                print("Building TrackingNet from lmdb")
--                datasets.append(TrackingNet_lmdb(settings.env.trackingnet_lmdb_dir, image_loader=image_loader))
--            else:
--                # raise ValueError("NOW WE CAN ONLY USE TRACKINGNET FROM LMDB")
--                datasets.append(TrackingNet(settings.env.trackingnet_dir, image_loader=image_loader))
--    return datasets
--
--
--def build_dataloaders(cfg, settings):
--    # Data transform
--    transform_joint = tfm.Transform(tfm.ToGrayscale(probability=0.05),
--                                    tfm.RandomHorizontalFlip(probability=0.5))
--
--    transform_train = tfm.Transform(tfm.ToTensorAndJitter(0.2),
--                                    tfm.RandomHorizontalFlip_Norm(probability=0.5),
--                                    tfm.Normalize(mean=cfg.DATA.MEAN, std=cfg.DATA.STD))
--
--    transform_val = tfm.Transform(tfm.ToTensor(),
--                                  tfm.Normalize(mean=cfg.DATA.MEAN, std=cfg.DATA.STD))
--
--    # The tracking pairs processing module
--    output_sz = settings.output_sz
--    search_area_factor = settings.search_area_factor
--
--    data_processing_train = processing.STARKProcessing(search_area_factor=search_area_factor,
--                                                       output_sz=output_sz,
--                                                       center_jitter_factor=settings.center_jitter_factor,
--                                                       scale_jitter_factor=settings.scale_jitter_factor,
-+from lib.train.freeze import apply_freeze_mode
-+
-+
-+def update_settings(settings, cfg):
-+    settings.print_interval = cfg.TRAIN.PRINT_INTERVAL
-+    settings.search_area_factor = {'template': cfg.DATA.TEMPLATE.FACTOR,
-+                                   'search': cfg.DATA.SEARCH.FACTOR}
-+    settings.output_sz = {'template': cfg.DATA.TEMPLATE.SIZE,
-+                          'search': cfg.DATA.SEARCH.SIZE}
-+    settings.center_jitter_factor = {'template': cfg.DATA.TEMPLATE.CENTER_JITTER,
-+                                     'search': cfg.DATA.SEARCH.CENTER_JITTER}
-+    settings.scale_jitter_factor = {'template': cfg.DATA.TEMPLATE.SCALE_JITTER,
-+                                    'search': cfg.DATA.SEARCH.SCALE_JITTER}
-+    settings.grad_clip_norm = cfg.TRAIN.GRAD_CLIP_NORM
-+    settings.print_stats = None
-+    settings.batchsize = cfg.TRAIN.BATCH_SIZE
-+    settings.scheduler_type = cfg.TRAIN.SCHEDULER.TYPE
-+
-+
-+def names2datasets(name_list: list, settings, image_loader):
-+    assert isinstance(name_list, list)
-+    datasets = []
-+    for name in name_list:
-+        assert name in ["LASOT", "GOT10K_vottrain", "GOT10K_votval", "GOT10K_train_full", "GOT10K_official_val",
-+                        "COCO17", "VID", "TRACKINGNET"]
-+        if name == "LASOT":
-+            if settings.use_lmdb:
-+                print("Building lasot dataset from lmdb")
-+                datasets.append(Lasot_lmdb(settings.env.lasot_lmdb_dir, split='train', image_loader=image_loader))
-+            else:
-+                datasets.append(Lasot(settings.env.lasot_dir, split='train', image_loader=image_loader))
-+        if name == "GOT10K_vottrain":
-+            if settings.use_lmdb:
-+                print("Building got10k from lmdb")
-+                datasets.append(Got10k_lmdb(settings.env.got10k_lmdb_dir, split='vottrain', image_loader=image_loader))
-+            else:
-+                datasets.append(Got10k(settings.env.got10k_dir, split='vottrain', image_loader=image_loader))
-+        if name == "GOT10K_train_full":
-+            if settings.use_lmdb:
-+                print("Building got10k_train_full from lmdb")
-+                datasets.append(Got10k_lmdb(settings.env.got10k_lmdb_dir, split='train_full', image_loader=image_loader))
-+            else:
-+                datasets.append(Got10k(settings.env.got10k_dir, split='train_full', image_loader=image_loader))
-+        if name == "GOT10K_votval":
-+            if settings.use_lmdb:
-+                print("Building got10k from lmdb")
-+                datasets.append(Got10k_lmdb(settings.env.got10k_lmdb_dir, split='votval', image_loader=image_loader))
-+            else:
-+                datasets.append(Got10k(settings.env.got10k_dir, split='votval', image_loader=image_loader))
-+        if name == "GOT10K_official_val":
-+            if settings.use_lmdb:
-+                raise ValueError("Not implement")
-+            else:
-+                datasets.append(Got10k(settings.env.got10k_val_dir, split=None, image_loader=image_loader))
-+        if name == "COCO17":
-+            if settings.use_lmdb:
-+                print("Building COCO2017 from lmdb")
-+                datasets.append(MSCOCOSeq_lmdb(settings.env.coco_lmdb_dir, version="2017", image_loader=image_loader))
-+            else:
-+                datasets.append(MSCOCOSeq(settings.env.coco_dir, version="2017", image_loader=image_loader))
-+        if name == "VID":
-+            if settings.use_lmdb:
-+                print("Building VID from lmdb")
-+                datasets.append(ImagenetVID_lmdb(settings.env.imagenet_lmdb_dir, image_loader=image_loader))
-+            else:
-+                datasets.append(ImagenetVID(settings.env.imagenet_dir, image_loader=image_loader))
-+        if name == "TRACKINGNET":
-+            if settings.use_lmdb:
-+                print("Building TrackingNet from lmdb")
-+                datasets.append(TrackingNet_lmdb(settings.env.trackingnet_lmdb_dir, image_loader=image_loader))
-+            else:
-+                # raise ValueError("NOW WE CAN ONLY USE TRACKINGNET FROM LMDB")
-+                datasets.append(TrackingNet(settings.env.trackingnet_dir, image_loader=image_loader))
-+    return datasets
-+
-+
-+def build_dataloaders(cfg, settings):
-+    # Data transform
-+    transform_joint = tfm.Transform(tfm.ToGrayscale(probability=0.05),
-+                                    tfm.RandomHorizontalFlip(probability=0.5))
-+
-+    transform_train = tfm.Transform(tfm.ToTensorAndJitter(0.2),
-+                                    tfm.RandomHorizontalFlip_Norm(probability=0.5),
-+                                    tfm.Normalize(mean=cfg.DATA.MEAN, std=cfg.DATA.STD))
-+
-+    transform_val = tfm.Transform(tfm.ToTensor(),
-+                                  tfm.Normalize(mean=cfg.DATA.MEAN, std=cfg.DATA.STD))
-+
-+    # The tracking pairs processing module
-+    output_sz = settings.output_sz
-+    search_area_factor = settings.search_area_factor
-+
-+    data_processing_train = processing.STARKProcessing(search_area_factor=search_area_factor,
-+                                                       output_sz=output_sz,
-+                                                       center_jitter_factor=settings.center_jitter_factor,
-+                                                       scale_jitter_factor=settings.scale_jitter_factor,
-                                                        mode='sequence',
-                                                        transform=transform_train,
-                                                        joint_transform=transform_joint,
-+                                                       degradation_cfg=cfg.DATA.DEGRADATION,
-+                                                       feature_consistency_cfg=cfg.TRAIN.FEATURE_CONSISTENCY,
-                                                        settings=settings)
--
--    data_processing_val = processing.STARKProcessing(search_area_factor=search_area_factor,
--                                                     output_sz=output_sz,
--                                                     center_jitter_factor=settings.center_jitter_factor,
--                                                     scale_jitter_factor=settings.scale_jitter_factor,
--                                                     mode='sequence',
--                                                     transform=transform_val,
--                                                     joint_transform=transform_joint,
--                                                     settings=settings)
--
--    # Train sampler and loader
--    settings.num_template = getattr(cfg.DATA.TEMPLATE, "NUMBER", 1)
--    settings.num_search = getattr(cfg.DATA.SEARCH, "NUMBER", 1)
--    sampler_mode = getattr(cfg.DATA, "SAMPLER_MODE", "causal")
--    train_cls = getattr(cfg.TRAIN, "TRAIN_CLS", False)
--    print("sampler_mode", sampler_mode)
--    dataset_train = sampler.TrackingSampler(datasets=names2datasets(cfg.DATA.TRAIN.DATASETS_NAME, settings, opencv_loader),
--                                            p_datasets=cfg.DATA.TRAIN.DATASETS_RATIO,
--                                            samples_per_epoch=cfg.DATA.TRAIN.SAMPLE_PER_EPOCH,
--                                            max_gap=cfg.DATA.MAX_SAMPLE_INTERVAL, num_search_frames=settings.num_search,
--                                            num_template_frames=settings.num_template, processing=data_processing_train,
--                                            frame_sample_mode=sampler_mode, train_cls=train_cls)
--
--    train_sampler = DistributedSampler(dataset_train) if settings.local_rank != -1 else None
--    shuffle = False if settings.local_rank != -1 else True
--
--    loader_train = LTRLoader('train', dataset_train, training=True, batch_size=cfg.TRAIN.BATCH_SIZE, shuffle=shuffle,
--                             num_workers=cfg.TRAIN.NUM_WORKER, drop_last=True, stack_dim=1, sampler=train_sampler)
--
--    # Validation samplers and loaders
--    dataset_val = sampler.TrackingSampler(datasets=names2datasets(cfg.DATA.VAL.DATASETS_NAME, settings, opencv_loader),
--                                          p_datasets=cfg.DATA.VAL.DATASETS_RATIO,
--                                          samples_per_epoch=cfg.DATA.VAL.SAMPLE_PER_EPOCH,
--                                          max_gap=cfg.DATA.MAX_SAMPLE_INTERVAL, num_search_frames=settings.num_search,
--                                          num_template_frames=settings.num_template, processing=data_processing_val,
--                                          frame_sample_mode=sampler_mode, train_cls=train_cls)
--    val_sampler = DistributedSampler(dataset_val) if settings.local_rank != -1 else None
--    loader_val = LTRLoader('val', dataset_val, training=False, batch_size=cfg.TRAIN.BATCH_SIZE,
--                           num_workers=cfg.TRAIN.NUM_WORKER, drop_last=True, stack_dim=1, sampler=val_sampler,
--                           epoch_interval=cfg.TRAIN.VAL_EPOCH_INTERVAL)
--
--    return loader_train, loader_val
--
--
-+
-+    data_processing_val = processing.STARKProcessing(search_area_factor=search_area_factor,
-+                                                     output_sz=output_sz,
-+                                                     center_jitter_factor=settings.center_jitter_factor,
-+                                                     scale_jitter_factor=settings.scale_jitter_factor,
-+                                                     mode='sequence',
-+                                                     transform=transform_val,
-+                                                     joint_transform=transform_joint,
-+                                                     settings=settings)
-+
-+    # Train sampler and loader
-+    settings.num_template = getattr(cfg.DATA.TEMPLATE, "NUMBER", 1)
-+    settings.num_search = getattr(cfg.DATA.SEARCH, "NUMBER", 1)
-+    sampler_mode = getattr(cfg.DATA, "SAMPLER_MODE", "causal")
-+    train_cls = getattr(cfg.TRAIN, "TRAIN_CLS", False)
-+    print("sampler_mode", sampler_mode)
-+    dataset_train = sampler.TrackingSampler(datasets=names2datasets(cfg.DATA.TRAIN.DATASETS_NAME, settings, opencv_loader),
-+                                            p_datasets=cfg.DATA.TRAIN.DATASETS_RATIO,
-+                                            samples_per_epoch=cfg.DATA.TRAIN.SAMPLE_PER_EPOCH,
-+                                            max_gap=cfg.DATA.MAX_SAMPLE_INTERVAL, num_search_frames=settings.num_search,
-+                                            num_template_frames=settings.num_template, processing=data_processing_train,
-+                                            frame_sample_mode=sampler_mode, train_cls=train_cls)
-+
-+    train_sampler = DistributedSampler(dataset_train) if settings.local_rank != -1 else None
-+    shuffle = False if settings.local_rank != -1 else True
-+
-+    loader_train = LTRLoader('train', dataset_train, training=True, batch_size=cfg.TRAIN.BATCH_SIZE, shuffle=shuffle,
-+                             num_workers=cfg.TRAIN.NUM_WORKER, drop_last=True, stack_dim=1, sampler=train_sampler)
-+
-+    # Validation samplers and loaders
-+    dataset_val = sampler.TrackingSampler(datasets=names2datasets(cfg.DATA.VAL.DATASETS_NAME, settings, opencv_loader),
-+                                          p_datasets=cfg.DATA.VAL.DATASETS_RATIO,
-+                                          samples_per_epoch=cfg.DATA.VAL.SAMPLE_PER_EPOCH,
-+                                          max_gap=cfg.DATA.MAX_SAMPLE_INTERVAL, num_search_frames=settings.num_search,
-+                                          num_template_frames=settings.num_template, processing=data_processing_val,
-+                                          frame_sample_mode=sampler_mode, train_cls=train_cls)
-+    val_sampler = DistributedSampler(dataset_val) if settings.local_rank != -1 else None
-+    loader_val = LTRLoader('val', dataset_val, training=False, batch_size=cfg.TRAIN.BATCH_SIZE,
-+                           num_workers=cfg.TRAIN.NUM_WORKER, drop_last=True, stack_dim=1, sampler=val_sampler,
-+                           epoch_interval=cfg.TRAIN.VAL_EPOCH_INTERVAL)
-+
-+    return loader_train, loader_val
-+
-+
- def get_optimizer_scheduler(net, cfg):
-+    apply_freeze_mode(net, cfg)
-     train_cls = getattr(cfg.TRAIN, "TRAIN_CLS", False)
--    if train_cls:
--        print("Only training classification head. Learnable parameters are shown below.")
--        param_dicts = [
--            {"params": [p for n, p in net.named_parameters() if "cls" in n and p.requires_grad]}
--        ]
--
--        for n, p in net.named_parameters():
--            if "cls" not in n:
--                p.requires_grad = False
--            else:
--                print(n)
-+    if train_cls:
-+        print("Only training classification head. Learnable parameters are shown below.")
-+        param_dicts = [
-+            {"params": [p for n, p in net.named_parameters() if "cls" in n and p.requires_grad]}
-+        ]
-+
-+        for n, p in net.named_parameters():
-+            if "cls" not in n:
-+                p.requires_grad = False
-+            else:
-+                print(n)
-     else:
-         param_dicts = [
-             {"params": [p for n, p in net.named_parameters() if "backbone" not in n and p.requires_grad]},
-             {
-                 "params": [p for n, p in net.named_parameters() if "backbone" in n and p.requires_grad],
--                "lr": cfg.TRAIN.LR * cfg.TRAIN.BACKBONE_MULTIPLIER,
--            },
--        ]
--        if is_main_process():
--            print("Learnable parameters are shown below.")
-+                "lr": cfg.TRAIN.LR * cfg.TRAIN.BACKBONE_MULTIPLIER,
-+            },
-+        ]
-+        if is_main_process():
-+            print("Learnable parameters are shown below.")
-             for n, p in net.named_parameters():
-                 if p.requires_grad:
-                     print(n)
- 
-+    param_dicts = [group for group in param_dicts if len(group["params"]) > 0]
-+    if len(param_dicts) == 0:
-+        raise ValueError("No trainable parameters found for optimizer.")
-+
-     if cfg.TRAIN.OPTIMIZER == "ADAMW":
-         optimizer = torch.optim.AdamW(param_dicts, lr=cfg.TRAIN.LR,
-                                       weight_decay=cfg.TRAIN.WEIGHT_DECAY)
--    else:
--        raise ValueError("Unsupported Optimizer")
--    if cfg.TRAIN.SCHEDULER.TYPE == 'step':
--        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, cfg.TRAIN.LR_DROP_EPOCH)
--    elif cfg.TRAIN.SCHEDULER.TYPE == "Mstep":
--        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,
--                                                            milestones=cfg.TRAIN.SCHEDULER.MILESTONES,
--                                                            gamma=cfg.TRAIN.SCHEDULER.GAMMA)
--    else:
--        raise ValueError("Unsupported scheduler")
--    return optimizer, lr_scheduler
-+    else:
-+        raise ValueError("Unsupported Optimizer")
-+    if cfg.TRAIN.SCHEDULER.TYPE == 'step':
-+        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, cfg.TRAIN.LR_DROP_EPOCH)
-+    elif cfg.TRAIN.SCHEDULER.TYPE == "Mstep":
-+        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,
-+                                                            milestones=cfg.TRAIN.SCHEDULER.MILESTONES,
-+                                                            gamma=cfg.TRAIN.SCHEDULER.GAMMA)
-+    else:
-+        raise ValueError("Unsupported scheduler")
-+    return optimizer, lr_scheduler
-diff --git a/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_hpc_featcons_lam002.yaml b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_hpc_featcons_lam002.yaml
-new file mode 100644
-index 0000000..0000000
---- /dev/null
-+++ b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_hpc_featcons_lam002.yaml
-@@ -0,0 +1,104 @@
-+# HPC RG-SSB + head training config with clean-degraded feature consistency.
-+# Architecture remains unchanged. Backbone remains frozen.
-+# Conservative defaults below should be adjusted for actual HPC GPU memory.
-+DATA:
-+  MAX_SAMPLE_INTERVAL: 200
-+  MEAN:
-+  - 0.485
-+  - 0.456
-+  - 0.406
-+  SEARCH:
-+    CENTER_JITTER: 3
-+    FACTOR: 4.0
-+    SCALE_JITTER: 0.25
-+    SIZE: 256
-+    NUMBER: 1
-+  STD:
-+  - 0.229
-+  - 0.224
-+  - 0.225
-+  TEMPLATE:
-+    CENTER_JITTER: 0
-+    FACTOR: 2.0
-+    SCALE_JITTER: 0
-+    SIZE: 128
-+  TRAIN:
-+    DATASETS_NAME:
-+    - LASOT
-+    DATASETS_RATIO:
-+    - 1
-+    SAMPLE_PER_EPOCH: 10000
-+  VAL:
-+    DATASETS_NAME:
-+    - LASOT
-+    DATASETS_RATIO:
-+    - 1
-+    SAMPLE_PER_EPOCH: 1000
-+  DEGRADATION:
-+    ENABLE: True
-+    PROBABILITY: 1.0
-+    APPLY_TO: "search_only"
-+    TYPES:
-+    - motion_blur
-+    - low_resolution
-+    - gaussian_noise
-+    SEVERITY: "medium"
-+    SEED: 42
-+MODEL:
-+  PRETRAIN_FILE: "output/checkpoints/train/ostrack/vitb_256_mae_ce_32x4_ep300/OSTrack_ep0300.pth.tar"
-+  EXTRA_MERGER: False
-+  RETURN_INTER: False
-+  BACKBONE:
-+    TYPE: vit_base_patch16_224_ce
-+    STRIDE: 16
-+    CE_LOC: [3, 6, 9]
-+    CE_KEEP_RATIO: [0.7, 0.7, 0.7]
-+    CE_TEMPLATE_RANGE: 'CTR_POINT'
-+  HEAD:
-+    TYPE: CENTER
-+    NUM_CHANNELS: 256
-+  RGSSB:
-+    ENABLE: True
-+TRAIN:
-+  BACKBONE_MULTIPLIER: 0.1
-+  DROP_PATH_RATE: 0.1
-+  CE_START_EPOCH: 20
-+  CE_WARM_EPOCH: 80
-+  BATCH_SIZE: 8
-+  EPOCH: 10
-+  GIOU_WEIGHT: 2.0
-+  L1_WEIGHT: 5.0
-+  GRAD_CLIP_NORM: 0.1
-+  LR: 0.0001
-+  LR_DROP_EPOCH: 10
-+  NUM_WORKER: 8
-+  OPTIMIZER: ADAMW
-+  PRINT_INTERVAL: 50
-+  FREEZE_MODE: "rgssb_head"
-+  FEATURE_CONSISTENCY:
-+    ENABLE: True
-+    WEIGHT: 0.02
-+    LOSS: "l1"
-+    NORMALIZE: True
-+    DETACH_CLEAN: True
-+  RESPONSE_CONSISTENCY:
-+    ENABLE: False
-+    WEIGHT: 0.0
-+    LOSS: "mse"
-+    DETACH_CLEAN: True
-+  SCHEDULER:
-+    TYPE: step
-+    DECAY_RATE: 0.1
-+  VAL_EPOCH_INTERVAL: 1
-+  WEIGHT_DECAY: 0.0001
-+  AMP: False
-+TEST:
-+  EPOCH: 10
-+  SEARCH_FACTOR: 4.0
-+  SEARCH_SIZE: 256
-+  TEMPLATE_FACTOR: 2.0
-+  TEMPLATE_SIZE: 128
-diff --git a/lib/config/ostrack/config.py b/lib/config/ostrack/config.py
---- a/lib/config/ostrack/config.py
-+++ b/lib/config/ostrack/config.py
-@@
- cfg.TRAIN.FEATURE_CONSISTENCY.LOSS = "l1"
- cfg.TRAIN.FEATURE_CONSISTENCY.NORMALIZE = True
- cfg.TRAIN.FEATURE_CONSISTENCY.DETACH_CLEAN = True
-+cfg.TRAIN.RESPONSE_CONSISTENCY = edict()
-+cfg.TRAIN.RESPONSE_CONSISTENCY.ENABLE = False
-+cfg.TRAIN.RESPONSE_CONSISTENCY.WEIGHT = 0.0
-+cfg.TRAIN.RESPONSE_CONSISTENCY.LOSS = "mse"
-+cfg.TRAIN.RESPONSE_CONSISTENCY.DETACH_CLEAN = True
- cfg.TRAIN.PRINT_INTERVAL = 50
-diff --git a/lib/train/base_functions.py b/lib/train/base_functions.py
---- a/lib/train/base_functions.py
-+++ b/lib/train/base_functions.py
-@@
-                                                        degradation_cfg=cfg.DATA.DEGRADATION,
-                                                        feature_consistency_cfg=cfg.TRAIN.FEATURE_CONSISTENCY,
-+                                                       response_consistency_cfg=cfg.TRAIN.RESPONSE_CONSISTENCY,
-                                                        settings=settings)
-@@
-                                                      joint_transform=transform_joint,
-                                                      feature_consistency_cfg=cfg.TRAIN.FEATURE_CONSISTENCY,
-+                                                     response_consistency_cfg=cfg.TRAIN.RESPONSE_CONSISTENCY,
-                                                      settings=settings)
-diff --git a/lib/train/data/processing.py b/lib/train/data/processing.py
---- a/lib/train/data/processing.py
-+++ b/lib/train/data/processing.py
-@@
--    def __init__(self, search_area_factor, output_sz, center_jitter_factor, scale_jitter_factor,
--                 mode='pair', settings=None, degradation_cfg=None, feature_consistency_cfg=None, *args, **kwargs):
-+    def __init__(self, search_area_factor, output_sz, center_jitter_factor, scale_jitter_factor,
-+                 mode='pair', settings=None, degradation_cfg=None, feature_consistency_cfg=None,
-+                 response_consistency_cfg=None, *args, **kwargs):
-@@
-         self.feature_consistency_enabled = bool(
-             getattr(feature_consistency_cfg, "ENABLE", False)
-         ) if feature_consistency_cfg is not None else False
-+        self.response_consistency_enabled = bool(
-+            getattr(response_consistency_cfg, "ENABLE", False)
-+        ) if response_consistency_cfg is not None else False
-+        self.clean_search_enabled = self.feature_consistency_enabled or self.response_consistency_enabled
-@@
--            if self.feature_consistency_enabled and s == 'search':
-+            if self.clean_search_enabled and s == 'search':
-                 clean_search_crops = [crop.copy() for crop in crops]
-diff --git a/lib/train/actors/ostrack.py b/lib/train/actors/ostrack.py
---- a/lib/train/actors/ostrack.py
-+++ b/lib/train/actors/ostrack.py
-@@
-         self.feature_consistency_enabled = bool(
-             getattr(self.feature_consistency_cfg, "ENABLE", False)
-         ) if self.feature_consistency_cfg is not None else False
-+        self.response_consistency_cfg = getattr(cfg.TRAIN, "RESPONSE_CONSISTENCY", None) if cfg is not None else None
-+        self.response_consistency_enabled = bool(
-+            getattr(self.response_consistency_cfg, "ENABLE", False)
-+        ) if self.response_consistency_cfg is not None else False
-+        self.clean_branch_enabled = self.feature_consistency_enabled or self.response_consistency_enabled
-@@
--        if self.feature_consistency_enabled:
-+        if self.clean_branch_enabled:
-             if 'search_images_clean' not in data:
-                 available_keys = sorted(list(data.keys())) if hasattr(data, "keys") else []
-                 raise KeyError(
--                    "Feature consistency requires data['search_images_clean']. "
-+                    "Clean/degraded consistency requires data['search_images_clean']. "
-                     "Available data keys: {}".format(available_keys)
-                 )
-@@
--                                         return_search_features=True)
-+                                         return_search_features=self.feature_consistency_enabled)
-@@
--                                     return_search_features=True)
--            out_dict['search_feat_rgssb_clean'] = clean_out['search_feat_rgssb']
-+                                     return_search_features=self.feature_consistency_enabled)
-+            if self.feature_consistency_enabled:
-+                out_dict['search_feat_rgssb_clean'] = clean_out['search_feat_rgssb']
-+            if self.response_consistency_enabled:
-+                if 'score_map' not in clean_out:
-+                    available_keys = sorted(list(clean_out.keys()))
-+                    raise KeyError(
-+                        "Response consistency requires clean_out['score_map']. "
-+                        "Available output keys: {}".format(available_keys)
-+                    )
-+                out_dict['score_map_clean'] = clean_out['score_map']
-@@
-         if self.feature_consistency_enabled:
-             feature_loss = self.compute_feature_consistency_loss(pred_dict)
-             loss = loss + float(self.feature_consistency_cfg.WEIGHT) * feature_loss
-+        response_loss = None
-+        if self.response_consistency_enabled:
-+            response_loss = self.compute_response_consistency_loss(pred_dict)
-+            loss = loss + float(self.response_consistency_cfg.WEIGHT) * response_loss
-@@
-             if feature_loss is not None:
-                 status["Loss/feature_consistency"] = feature_loss.item()
-+            if response_loss is not None:
-+                status["Loss/response_consistency"] = response_loss.item()
-             return loss, status
-@@
-         if not torch.isfinite(feature_loss):
-             raise ValueError("Feature consistency loss is not finite.")
-         return feature_loss
 +
 +    def compute_response_consistency_loss(self, pred_dict):
 +        if 'score_map' not in pred_dict:
@@ -2746,10 +547,12 @@ diff --git a/lib/train/actors/ostrack.py b/lib/train/actors/ostrack.py
 +                "Response consistency requires pred_dict['score_map_clean']. "
 +                "Available output keys: {}".format(available_keys)
 +            )
++
 +        degraded_response = pred_dict['score_map']
 +        clean_response = pred_dict['score_map_clean']
 +        if bool(getattr(self.response_consistency_cfg, "DETACH_CLEAN", True)):
 +            clean_response = clean_response.detach()
++
 +        loss_type = str(getattr(self.response_consistency_cfg, "LOSS", "mse")).lower()
 +        if loss_type == "mse":
 +            response_loss = F.mse_loss(degraded_response, clean_response)
@@ -2760,1342 +563,46 @@ diff --git a/lib/train/actors/ostrack.py b/lib/train/actors/ostrack.py
 +        if not torch.isfinite(response_loss):
 +            raise ValueError("Response consistency loss is not finite.")
 +        return response_loss
-diff --git a/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_3000_featcons_lam002_respcons_debug.yaml b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_3000_featcons_lam002_respcons_debug.yaml
-new file mode 100644
-index 0000000..0000000
---- /dev/null
-+++ b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_3000_featcons_lam002_respcons_debug.yaml
-@@ -0,0 +1,99 @@
-+# Debug-only RG-SSB + head training config with feature and response consistency.
-+# Backbone remains frozen. Architecture is unchanged.
-+DATA:
-+  MAX_SAMPLE_INTERVAL: 200
-+  MEAN:
-+  - 0.485
-+  - 0.456
-+  - 0.406
-+  SEARCH:
-+    CENTER_JITTER: 3
-+    FACTOR: 4.0
-+    SCALE_JITTER: 0.25
-+    SIZE: 256
-+    NUMBER: 1
-+  STD:
-+  - 0.229
-+  - 0.224
-+  - 0.225
-+  TEMPLATE:
-+    CENTER_JITTER: 0
-+    FACTOR: 2.0
-+    SCALE_JITTER: 0
-+    SIZE: 128
-+  TRAIN:
-+    DATASETS_NAME:
-+    - LASOT
-+    DATASETS_RATIO:
-+    - 1
-+    SAMPLE_PER_EPOCH: 3000
-+  VAL:
-+    DATASETS_NAME:
-+    - LASOT
-+    DATASETS_RATIO:
-+    - 1
-+    SAMPLE_PER_EPOCH: 300
-+  DEGRADATION:
-+    ENABLE: True
-+    PROBABILITY: 1.0
-+    APPLY_TO: "search_only"
-+    TYPES:
-+    - motion_blur
-+    - low_resolution
-+    - gaussian_noise
-+    SEVERITY: "medium"
-+    SEED: 42
-+MODEL:
-+  PRETRAIN_FILE: "output/checkpoints/train/ostrack/vitb_256_mae_ce_32x4_ep300/OSTrack_ep0300.pth.tar"
-+  EXTRA_MERGER: False
-+  RETURN_INTER: False
-+  BACKBONE:
-+    TYPE: vit_base_patch16_224_ce
-+    STRIDE: 16
-+    CE_LOC: [3, 6, 9]
-+    CE_KEEP_RATIO: [0.7, 0.7, 0.7]
-+    CE_TEMPLATE_RANGE: 'CTR_POINT'
-+  HEAD:
-+    TYPE: CENTER
-+    NUM_CHANNELS: 256
-+  RGSSB:
-+    ENABLE: True
-+TRAIN:
-+  BACKBONE_MULTIPLIER: 0.1
-+  DROP_PATH_RATE: 0.1
-+  CE_START_EPOCH: 20
-+  CE_WARM_EPOCH: 80
-+  BATCH_SIZE: 1
-+  EPOCH: 1
-+  GIOU_WEIGHT: 2.0
-+  L1_WEIGHT: 5.0
-+  GRAD_CLIP_NORM: 0.1
-+  LR: 0.0001
-+  LR_DROP_EPOCH: 1
-+  NUM_WORKER: 2
-+  OPTIMIZER: ADAMW
-+  PRINT_INTERVAL: 5
-+  FREEZE_MODE: "rgssb_head"
-+  FEATURE_CONSISTENCY:
-+    ENABLE: True
-+    WEIGHT: 0.02
-+    LOSS: "l1"
-+    NORMALIZE: True
-+    DETACH_CLEAN: True
-+  RESPONSE_CONSISTENCY:
-+    ENABLE: True
-+    WEIGHT: 0.05
-+    LOSS: "mse"
-+    DETACH_CLEAN: True
-+  SCHEDULER:
-+    TYPE: step
-+    DECAY_RATE: 0.1
-+  VAL_EPOCH_INTERVAL: 1
-+  WEIGHT_DECAY: 0.0001
-+  AMP: False
-+TEST:
-+  EPOCH: 1
-+  SEARCH_FACTOR: 4.0
-+  SEARCH_SIZE: 256
-+  TEMPLATE_FACTOR: 2.0
-+  TEMPLATE_SIZE: 128
-diff --git a/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_3000_featcons_lam002_debug.yaml b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_3000_featcons_lam002_debug.yaml
-new file mode 100644
-index 0000000..0000000
---- /dev/null
-+++ b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_3000_featcons_lam002_debug.yaml
-@@ -0,0 +1,94 @@
-+# Debug-only RG-SSB + head training config with clean-degraded feature consistency.
-+# Backbone remains frozen. Feature consistency compares clean/degraded post-RGSSB search tokens.
-+DATA:
-+  MAX_SAMPLE_INTERVAL: 200
-+  MEAN:
-+  - 0.485
-+  - 0.456
-+  - 0.406
-+  SEARCH:
-+    CENTER_JITTER: 3
-+    FACTOR: 4.0
-+    SCALE_JITTER: 0.25
-+    SIZE: 256
-+    NUMBER: 1
-+  STD:
-+  - 0.229
-+  - 0.224
-+  - 0.225
-+  TEMPLATE:
-+    CENTER_JITTER: 0
-+    FACTOR: 2.0
-+    SCALE_JITTER: 0
-+    SIZE: 128
-+  TRAIN:
-+    DATASETS_NAME:
-+    - LASOT
-+    DATASETS_RATIO:
-+    - 1
-+    SAMPLE_PER_EPOCH: 3000
-+  VAL:
-+    DATASETS_NAME:
-+    - LASOT
-+    DATASETS_RATIO:
-+    - 1
-+    SAMPLE_PER_EPOCH: 300
-+  DEGRADATION:
-+    ENABLE: True
-+    PROBABILITY: 1.0
-+    APPLY_TO: "search_only"
-+    TYPES:
-+    - motion_blur
-+    - low_resolution
-+    - gaussian_noise
-+    SEVERITY: "medium"
-+    SEED: 42
-+MODEL:
-+  PRETRAIN_FILE: "output/checkpoints/train/ostrack/vitb_256_mae_ce_32x4_ep300/OSTrack_ep0300.pth.tar"
-+  EXTRA_MERGER: False
-+  RETURN_INTER: False
-+  BACKBONE:
-+    TYPE: vit_base_patch16_224_ce
-+    STRIDE: 16
-+    CE_LOC: [3, 6, 9]
-+    CE_KEEP_RATIO: [0.7, 0.7, 0.7]
-+    CE_TEMPLATE_RANGE: 'CTR_POINT'
-+  HEAD:
-+    TYPE: CENTER
-+    NUM_CHANNELS: 256
-+  RGSSB:
-+    ENABLE: True
-+TRAIN:
-+  BACKBONE_MULTIPLIER: 0.1
-+  DROP_PATH_RATE: 0.1
-+  CE_START_EPOCH: 20
-+  CE_WARM_EPOCH: 80
-+  BATCH_SIZE: 1
-+  EPOCH: 1
-+  GIOU_WEIGHT: 2.0
-+  L1_WEIGHT: 5.0
-+  GRAD_CLIP_NORM: 0.1
-+  LR: 0.0001
-+  LR_DROP_EPOCH: 1
-+  NUM_WORKER: 2
-+  OPTIMIZER: ADAMW
-+  PRINT_INTERVAL: 5
-+  FREEZE_MODE: "rgssb_head"
-+  FEATURE_CONSISTENCY:
-+    ENABLE: True
-+    WEIGHT: 0.02
-+    LOSS: "l1"
-+    NORMALIZE: True
-+    DETACH_CLEAN: True
-+  SCHEDULER:
-+    TYPE: step
-+    DECAY_RATE: 0.1
-+  VAL_EPOCH_INTERVAL: 1
-+  WEIGHT_DECAY: 0.0001
-+  AMP: False
-+TEST:
-+  EPOCH: 1
-+  SEARCH_FACTOR: 4.0
-+  SEARCH_SIZE: 256
-+  TEMPLATE_FACTOR: 2.0
-+  TEMPLATE_SIZE: 128
-diff --git a/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_3000_featcons_lam010_debug.yaml b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_3000_featcons_lam010_debug.yaml
-new file mode 100644
-index 0000000..0000000
---- /dev/null
-+++ b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_3000_featcons_lam010_debug.yaml
-@@ -0,0 +1,94 @@
-+# Debug-only RG-SSB + head training config with clean-degraded feature consistency.
-+# Backbone remains frozen. Feature consistency compares clean/degraded post-RGSSB search tokens.
-+DATA:
-+  MAX_SAMPLE_INTERVAL: 200
-+  MEAN:
-+  - 0.485
-+  - 0.456
-+  - 0.406
-+  SEARCH:
-+    CENTER_JITTER: 3
-+    FACTOR: 4.0
-+    SCALE_JITTER: 0.25
-+    SIZE: 256
-+    NUMBER: 1
-+  STD:
-+  - 0.229
-+  - 0.224
-+  - 0.225
-+  TEMPLATE:
-+    CENTER_JITTER: 0
-+    FACTOR: 2.0
-+    SCALE_JITTER: 0
-+    SIZE: 128
-+  TRAIN:
-+    DATASETS_NAME:
-+    - LASOT
-+    DATASETS_RATIO:
-+    - 1
-+    SAMPLE_PER_EPOCH: 3000
-+  VAL:
-+    DATASETS_NAME:
-+    - LASOT
-+    DATASETS_RATIO:
-+    - 1
-+    SAMPLE_PER_EPOCH: 300
-+  DEGRADATION:
-+    ENABLE: True
-+    PROBABILITY: 1.0
-+    APPLY_TO: "search_only"
-+    TYPES:
-+    - motion_blur
-+    - low_resolution
-+    - gaussian_noise
-+    SEVERITY: "medium"
-+    SEED: 42
-+MODEL:
-+  PRETRAIN_FILE: "output/checkpoints/train/ostrack/vitb_256_mae_ce_32x4_ep300/OSTrack_ep0300.pth.tar"
-+  EXTRA_MERGER: False
-+  RETURN_INTER: False
-+  BACKBONE:
-+    TYPE: vit_base_patch16_224_ce
-+    STRIDE: 16
-+    CE_LOC: [3, 6, 9]
-+    CE_KEEP_RATIO: [0.7, 0.7, 0.7]
-+    CE_TEMPLATE_RANGE: 'CTR_POINT'
-+  HEAD:
-+    TYPE: CENTER
-+    NUM_CHANNELS: 256
-+  RGSSB:
-+    ENABLE: True
-+TRAIN:
-+  BACKBONE_MULTIPLIER: 0.1
-+  DROP_PATH_RATE: 0.1
-+  CE_START_EPOCH: 20
-+  CE_WARM_EPOCH: 80
-+  BATCH_SIZE: 1
-+  EPOCH: 1
-+  GIOU_WEIGHT: 2.0
-+  L1_WEIGHT: 5.0
-+  GRAD_CLIP_NORM: 0.1
-+  LR: 0.0001
-+  LR_DROP_EPOCH: 1
-+  NUM_WORKER: 2
-+  OPTIMIZER: ADAMW
-+  PRINT_INTERVAL: 5
-+  FREEZE_MODE: "rgssb_head"
-+  FEATURE_CONSISTENCY:
-+    ENABLE: True
-+    WEIGHT: 0.10
-+    LOSS: "l1"
-+    NORMALIZE: True
-+    DETACH_CLEAN: True
-+  SCHEDULER:
-+    TYPE: step
-+    DECAY_RATE: 0.1
-+  VAL_EPOCH_INTERVAL: 1
-+  WEIGHT_DECAY: 0.0001
-+  AMP: False
-+TEST:
-+  EPOCH: 1
-+  SEARCH_FACTOR: 4.0
-+  SEARCH_SIZE: 256
-+  TEMPLATE_FACTOR: 2.0
-+  TEMPLATE_SIZE: 128
-diff --git a/lib/train/data/processing.py b/lib/train/data/processing.py
-index 3accc9e..0f64b02 100644
---- a/lib/train/data/processing.py
-+++ b/lib/train/data/processing.py
-@@ -1,154 +1,176 @@
--import torch
--import torchvision.transforms as transforms
--from lib.utils import TensorDict
--import lib.train.data.processing_utils as prutils
-+import torch
-+import torchvision.transforms as transforms
-+from lib.utils import TensorDict
-+import lib.train.data.processing_utils as prutils
- import torch.nn.functional as F
--
--
--def stack_tensors(x):
--    if isinstance(x, (list, tuple)) and isinstance(x[0], torch.Tensor):
--        return torch.stack(x)
--    return x
--
--
--class BaseProcessing:
--    """ Base class for Processing. Processing class is used to process the data returned by a dataset, before passing it
--     through the network. For example, it can be used to crop a search region around the object, apply various data
--     augmentations, etc."""
--    def __init__(self, transform=transforms.ToTensor(), template_transform=None, search_transform=None, joint_transform=None):
--        """
--        args:
--            transform       - The set of transformations to be applied on the images. Used only if template_transform or
--                                search_transform is None.
--            template_transform - The set of transformations to be applied on the template images. If None, the 'transform'
--                                argument is used instead.
--            search_transform  - The set of transformations to be applied on the search images. If None, the 'transform'
--                                argument is used instead.
--            joint_transform - The set of transformations to be applied 'jointly' on the template and search images.  For
--                                example, it can be used to convert both template and search images to grayscale.
--        """
--        self.transform = {'template': transform if template_transform is None else template_transform,
--                          'search':  transform if search_transform is None else search_transform,
--                          'joint': joint_transform}
--
--    def __call__(self, data: TensorDict):
--        raise NotImplementedError
--
--
--class STARKProcessing(BaseProcessing):
--    """ The processing class used for training LittleBoy. The images are processed in the following way.
--    First, the target bounding box is jittered by adding some noise. Next, a square region (called search region )
--    centered at the jittered target center, and of area search_area_factor^2 times the area of the jittered box is
--    cropped from the image. The reason for jittering the target box is to avoid learning the bias that the target is
--    always at the center of the search region. The search region is then resized to a fixed size given by the
--    argument output_sz.
--
--    """
--
-+from lib.train.data.degradation import TrainingDegradationAugmentor
-+
-+
-+def stack_tensors(x):
-+    if isinstance(x, (list, tuple)) and isinstance(x[0], torch.Tensor):
-+        return torch.stack(x)
-+    return x
-+
-+
-+class BaseProcessing:
-+    """ Base class for Processing. Processing class is used to process the data returned by a dataset, before passing it
-+     through the network. For example, it can be used to crop a search region around the object, apply various data
-+     augmentations, etc."""
-+    def __init__(self, transform=transforms.ToTensor(), template_transform=None, search_transform=None, joint_transform=None):
-+        """
-+        args:
-+            transform       - The set of transformations to be applied on the images. Used only if template_transform or
-+                                search_transform is None.
-+            template_transform - The set of transformations to be applied on the template images. If None, the 'transform'
-+                                argument is used instead.
-+            search_transform  - The set of transformations to be applied on the search images. If None, the 'transform'
-+                                argument is used instead.
-+            joint_transform - The set of transformations to be applied 'jointly' on the template and search images.  For
-+                                example, it can be used to convert both template and search images to grayscale.
-+        """
-+        self.transform = {'template': transform if template_transform is None else template_transform,
-+                          'search':  transform if search_transform is None else search_transform,
-+                          'joint': joint_transform}
-+
-+    def __call__(self, data: TensorDict):
-+        raise NotImplementedError
-+
-+
-+class STARKProcessing(BaseProcessing):
-+    """ The processing class used for training LittleBoy. The images are processed in the following way.
-+    First, the target bounding box is jittered by adding some noise. Next, a square region (called search region )
-+    centered at the jittered target center, and of area search_area_factor^2 times the area of the jittered box is
-+    cropped from the image. The reason for jittering the target box is to avoid learning the bias that the target is
-+    always at the center of the search region. The search region is then resized to a fixed size given by the
-+    argument output_sz.
-+
-+    """
-+
-     def __init__(self, search_area_factor, output_sz, center_jitter_factor, scale_jitter_factor,
--                 mode='pair', settings=None, *args, **kwargs):
--        """
--        args:
--            search_area_factor - The size of the search region  relative to the target size.
--            output_sz - An integer, denoting the size to which the search region is resized. The search region is always
--                        square.
--            center_jitter_factor - A dict containing the amount of jittering to be applied to the target center before
--                                    extracting the search region. See _get_jittered_box for how the jittering is done.
--            scale_jitter_factor - A dict containing the amount of jittering to be applied to the target size before
--                                    extracting the search region. See _get_jittered_box for how the jittering is done.
--            mode - Either 'pair' or 'sequence'. If mode='sequence', then output has an extra dimension for frames
--        """
--        super().__init__(*args, **kwargs)
--        self.search_area_factor = search_area_factor
--        self.output_sz = output_sz
--        self.center_jitter_factor = center_jitter_factor
--        self.scale_jitter_factor = scale_jitter_factor
-+                 mode='pair', settings=None, degradation_cfg=None, feature_consistency_cfg=None, *args, **kwargs):
-+        """
-+        args:
-+            search_area_factor - The size of the search region  relative to the target size.
-+            output_sz - An integer, denoting the size to which the search region is resized. The search region is always
-+                        square.
-+            center_jitter_factor - A dict containing the amount of jittering to be applied to the target center before
-+                                    extracting the search region. See _get_jittered_box for how the jittering is done.
-+            scale_jitter_factor - A dict containing the amount of jittering to be applied to the target size before
-+                                    extracting the search region. See _get_jittered_box for how the jittering is done.
-+            mode - Either 'pair' or 'sequence'. If mode='sequence', then output has an extra dimension for frames
-+        """
-+        super().__init__(*args, **kwargs)
-+        self.search_area_factor = search_area_factor
-+        self.output_sz = output_sz
-+        self.center_jitter_factor = center_jitter_factor
-+        self.scale_jitter_factor = scale_jitter_factor
-         self.mode = mode
-         self.settings = settings
--
--    def _get_jittered_box(self, box, mode):
--        """ Jitter the input box
--        args:
--            box - input bounding box
--            mode - string 'template' or 'search' indicating template or search data
--
--        returns:
--            torch.Tensor - jittered box
--        """
--
--        jittered_size = box[2:4] * torch.exp(torch.randn(2) * self.scale_jitter_factor[mode])
--        max_offset = (jittered_size.prod().sqrt() * torch.tensor(self.center_jitter_factor[mode]).float())
--        jittered_center = box[0:2] + 0.5 * box[2:4] + max_offset * (torch.rand(2) - 0.5)
--
--        return torch.cat((jittered_center - 0.5 * jittered_size, jittered_size), dim=0)
--
--    def __call__(self, data: TensorDict):
--        """
--        args:
--            data - The input data, should contain the following fields:
--                'template_images', search_images', 'template_anno', 'search_anno'
--        returns:
--            TensorDict - output data block with following fields:
--                'template_images', 'search_images', 'template_anno', 'search_anno', 'test_proposals', 'proposal_iou'
--        """
--        # Apply joint transforms
-+        self.degradation = TrainingDegradationAugmentor(degradation_cfg) if degradation_cfg is not None else None
-+        self.feature_consistency_enabled = bool(
-+            getattr(feature_consistency_cfg, "ENABLE", False)
-+        ) if feature_consistency_cfg is not None else False
-+
-+    def _get_jittered_box(self, box, mode):
-+        """ Jitter the input box
-+        args:
-+            box - input bounding box
-+            mode - string 'template' or 'search' indicating template or search data
-+
-+        returns:
-+            torch.Tensor - jittered box
-+        """
-+
-+        jittered_size = box[2:4] * torch.exp(torch.randn(2) * self.scale_jitter_factor[mode])
-+        max_offset = (jittered_size.prod().sqrt() * torch.tensor(self.center_jitter_factor[mode]).float())
-+        jittered_center = box[0:2] + 0.5 * box[2:4] + max_offset * (torch.rand(2) - 0.5)
-+
-+        return torch.cat((jittered_center - 0.5 * jittered_size, jittered_size), dim=0)
-+
-+    def __call__(self, data: TensorDict):
-+        """
-+        args:
-+            data - The input data, should contain the following fields:
-+                'template_images', search_images', 'template_anno', 'search_anno'
-+        returns:
-+            TensorDict - output data block with following fields:
-+                'template_images', 'search_images', 'template_anno', 'search_anno', 'test_proposals', 'proposal_iou'
-+        """
-+        # Apply joint transforms
-         if self.transform['joint'] is not None:
-             data['template_images'], data['template_anno'], data['template_masks'] = self.transform['joint'](
-                 image=data['template_images'], bbox=data['template_anno'], mask=data['template_masks'])
-             data['search_images'], data['search_anno'], data['search_masks'] = self.transform['joint'](
-                 image=data['search_images'], bbox=data['search_anno'], mask=data['search_masks'], new_roll=False)
- 
--        for s in ['template', 'search']:
--            assert self.mode == 'sequence' or len(data[s + '_images']) == 1, \
--                "In pair mode, num train/test frames must be 1"
--
--            # Add a uniform noise to the center pos
--            jittered_anno = [self._get_jittered_box(a, s) for a in data[s + '_anno']]
--
--            # 2021.1.9 Check whether data is valid. Avoid too small bounding boxes
--            w, h = torch.stack(jittered_anno, dim=0)[:, 2], torch.stack(jittered_anno, dim=0)[:, 3]
--
--            crop_sz = torch.ceil(torch.sqrt(w * h) * self.search_area_factor[s])
--            if (crop_sz < 1).any():
--                data['valid'] = False
--                # print("Too small box is found. Replace it with new data.")
--                return data
-+        if self.degradation is not None:
-+            self.degradation.begin_sample()
- 
-+        for s in ['template', 'search']:
-+            assert self.mode == 'sequence' or len(data[s + '_images']) == 1, \
-+                "In pair mode, num train/test frames must be 1"
-+
-+            # Add a uniform noise to the center pos
-+            jittered_anno = [self._get_jittered_box(a, s) for a in data[s + '_anno']]
-+
-+            # 2021.1.9 Check whether data is valid. Avoid too small bounding boxes
-+            w, h = torch.stack(jittered_anno, dim=0)[:, 2], torch.stack(jittered_anno, dim=0)[:, 3]
-+
-+            crop_sz = torch.ceil(torch.sqrt(w * h) * self.search_area_factor[s])
-+            if (crop_sz < 1).any():
-+                data['valid'] = False
-+                # print("Too small box is found. Replace it with new data.")
-+                return data
-+
-             # Crop image region centered at jittered_anno box and get the attention mask
-             crops, boxes, att_mask, mask_crops = prutils.jittered_center_crop(data[s + '_images'], jittered_anno,
-                                                                               data[s + '_anno'], self.search_area_factor[s],
-                                                                               self.output_sz[s], masks=data[s + '_masks'])
-+            clean_search_crops = None
-+            if self.feature_consistency_enabled and s == 'search':
-+                clean_search_crops = [crop.copy() for crop in crops]
-+            if self.degradation is not None:
-+                crops = self.degradation.apply(crops, role=s)
-             # Apply transforms
-             data[s + '_images'], data[s + '_anno'], data[s + '_att'], data[s + '_masks'] = self.transform[s](
-                 image=crops, bbox=boxes, att=att_mask, mask=mask_crops, joint=False)
--
--            # 2021.1.9 Check whether elements in data[s + '_att'] is all 1
--            # Note that type of data[s + '_att'] is tuple, type of ele is torch.tensor
--            for ele in data[s + '_att']:
--                if (ele == 1).all():
--                    data['valid'] = False
--                    # print("Values of original attention mask are all one. Replace it with new data.")
--                    return data
--            # 2021.1.10 more strict conditions: require the donwsampled masks not to be all 1
--            for ele in data[s + '_att']:
--                feat_size = self.output_sz[s] // 16  # 16 is the backbone stride
--                # (1,1,128,128) (1,1,256,256) --> (1,1,8,8) (1,1,16,16)
--                mask_down = F.interpolate(ele[None, None].float(), size=feat_size).to(torch.bool)[0]
--                if (mask_down == 1).all():
--                    data['valid'] = False
--                    # print("Values of down-sampled attention mask are all one. "
--                    #       "Replace it with new data.")
--                    return data
--
--        data['valid'] = True
--        # if we use copy-and-paste augmentation
--        if data["template_masks"] is None or data["search_masks"] is None:
--            data["template_masks"] = torch.zeros((1, self.output_sz["template"], self.output_sz["template"]))
--            data["search_masks"] = torch.zeros((1, self.output_sz["search"], self.output_sz["search"]))
--        # Prepare output
--        if self.mode == 'sequence':
--            data = data.apply(stack_tensors)
--        else:
--            data = data.apply(lambda x: x[0] if isinstance(x, list) else x)
--
--        return data
-+            if clean_search_crops is not None:
-+                clean_images, clean_boxes, clean_att, clean_masks = self.transform[s](
-+                    image=clean_search_crops,
-+                    bbox=boxes,
-+                    att=att_mask,
-+                    mask=mask_crops,
-+                    joint=False,
-+                    new_roll=False)
-+                data['search_images_clean'] = clean_images
-+
-+            # 2021.1.9 Check whether elements in data[s + '_att'] is all 1
-+            # Note that type of data[s + '_att'] is tuple, type of ele is torch.tensor
-+            for ele in data[s + '_att']:
-+                if (ele == 1).all():
-+                    data['valid'] = False
-+                    # print("Values of original attention mask are all one. Replace it with new data.")
-+                    return data
-+            # 2021.1.10 more strict conditions: require the donwsampled masks not to be all 1
-+            for ele in data[s + '_att']:
-+                feat_size = self.output_sz[s] // 16  # 16 is the backbone stride
-+                # (1,1,128,128) (1,1,256,256) --> (1,1,8,8) (1,1,16,16)
-+                mask_down = F.interpolate(ele[None, None].float(), size=feat_size).to(torch.bool)[0]
-+                if (mask_down == 1).all():
-+                    data['valid'] = False
-+                    # print("Values of down-sampled attention mask are all one. "
-+                    #       "Replace it with new data.")
-+                    return data
-+
-+        data['valid'] = True
-+        # if we use copy-and-paste augmentation
-+        if data["template_masks"] is None or data["search_masks"] is None:
-+            data["template_masks"] = torch.zeros((1, self.output_sz["template"], self.output_sz["template"]))
-+            data["search_masks"] = torch.zeros((1, self.output_sz["search"], self.output_sz["search"]))
-+        # Prepare output
-+        if self.mode == 'sequence':
-+            data = data.apply(stack_tensors)
-+        else:
-+            data = data.apply(lambda x: x[0] if isinstance(x, list) else x)
-+
-+        return data
-diff --git a/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_3000_featcons_debug.yaml b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_3000_featcons_debug.yaml
-new file mode 100644
-index 0000000..2273a4a
---- /dev/null
-+++ b/experiments/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_3000_featcons_debug.yaml
-@@ -0,0 +1,94 @@
-+# Debug-only RG-SSB + head training config with clean-degraded feature consistency.
-+# Backbone remains frozen. Feature consistency compares clean/degraded post-RGSSB search tokens.
-+DATA:
-+  MAX_SAMPLE_INTERVAL: 200
-+  MEAN:
-+  - 0.485
-+  - 0.456
-+  - 0.406
-+  SEARCH:
-+    CENTER_JITTER: 3
-+    FACTOR: 4.0
-+    SCALE_JITTER: 0.25
-+    SIZE: 256
-+    NUMBER: 1
-+  STD:
-+  - 0.229
-+  - 0.224
-+  - 0.225
-+  TEMPLATE:
-+    CENTER_JITTER: 0
-+    FACTOR: 2.0
-+    SCALE_JITTER: 0
-+    SIZE: 128
-+  TRAIN:
-+    DATASETS_NAME:
-+    - LASOT
-+    DATASETS_RATIO:
-+    - 1
-+    SAMPLE_PER_EPOCH: 3000
-+  VAL:
-+    DATASETS_NAME:
-+    - LASOT
-+    DATASETS_RATIO:
-+    - 1
-+    SAMPLE_PER_EPOCH: 300
-+  DEGRADATION:
-+    ENABLE: True
-+    PROBABILITY: 1.0
-+    APPLY_TO: "search_only"
-+    TYPES:
-+    - motion_blur
-+    - low_resolution
-+    - gaussian_noise
-+    SEVERITY: "medium"
-+    SEED: 42
-+MODEL:
-+  PRETRAIN_FILE: "output/checkpoints/train/ostrack/vitb_256_mae_ce_32x4_ep300/OSTrack_ep0300.pth.tar"
-+  EXTRA_MERGER: False
-+  RETURN_INTER: False
-+  BACKBONE:
-+    TYPE: vit_base_patch16_224_ce
-+    STRIDE: 16
-+    CE_LOC: [3, 6, 9]
-+    CE_KEEP_RATIO: [0.7, 0.7, 0.7]
-+    CE_TEMPLATE_RANGE: 'CTR_POINT'
-+  HEAD:
-+    TYPE: CENTER
-+    NUM_CHANNELS: 256
-+  RGSSB:
-+    ENABLE: True
-+TRAIN:
-+  BACKBONE_MULTIPLIER: 0.1
-+  DROP_PATH_RATE: 0.1
-+  CE_START_EPOCH: 20
-+  CE_WARM_EPOCH: 80
-+  BATCH_SIZE: 1
-+  EPOCH: 1
-+  GIOU_WEIGHT: 2.0
-+  L1_WEIGHT: 5.0
-+  GRAD_CLIP_NORM: 0.1
-+  LR: 0.0001
-+  LR_DROP_EPOCH: 1
-+  NUM_WORKER: 2
-+  OPTIMIZER: ADAMW
-+  PRINT_INTERVAL: 5
-+  FREEZE_MODE: "rgssb_head"
-+  FEATURE_CONSISTENCY:
-+    ENABLE: True
-+    WEIGHT: 0.05
-+    LOSS: "l1"
-+    NORMALIZE: True
-+    DETACH_CLEAN: True
-+  SCHEDULER:
-+    TYPE: step
-+    DECAY_RATE: 0.1
-+  VAL_EPOCH_INTERVAL: 1
-+  WEIGHT_DECAY: 0.0001
-+  AMP: False
-+TEST:
-+  EPOCH: 1
-+  SEARCH_FACTOR: 4.0
-+  SEARCH_SIZE: 256
-+  TEMPLATE_FACTOR: 2.0
-+  TEMPLATE_SIZE: 128
-
-# Feature consistency real dataloader fix
-diff --git a/lib/train/actors/ostrack.py b/lib/train/actors/ostrack.py
-index 36d1341..314079d 100644
---- a/lib/train/actors/ostrack.py
-+++ b/lib/train/actors/ostrack.py
-@@ -1,115 +1,178 @@
--from . import BaseActor
--from lib.utils.misc import NestedTensor
--from lib.utils.box_ops import box_cxcywh_to_xyxy, box_xywh_to_xyxy
-+from . import BaseActor
-+from lib.utils.misc import NestedTensor
-+from lib.utils.box_ops import box_cxcywh_to_xyxy, box_xywh_to_xyxy
- import torch
-+import torch.nn.functional as F
- from lib.utils.merge import merge_template_search
--from ...utils.heapmap_utils import generate_heatmap
--from ...utils.ce_utils import generate_mask_cond, adjust_keep_rate
--
--
--class OSTrackActor(BaseActor):
--    """ Actor for training OSTrack models """
--
--    def __init__(self, net, objective, loss_weight, settings, cfg=None):
--        super().__init__(net, objective)
--        self.loss_weight = loss_weight
-+from ...utils.heapmap_utils import generate_heatmap
-+from ...utils.ce_utils import generate_mask_cond, adjust_keep_rate
-+
-+
-+class OSTrackActor(BaseActor):
-+    """ Actor for training OSTrack models """
-+
-+    def __init__(self, net, objective, loss_weight, settings, cfg=None):
-+        super().__init__(net, objective)
-+        self.loss_weight = loss_weight
-         self.settings = settings
-         self.bs = self.settings.batchsize  # batch size
-         self.cfg = cfg
--
--    def __call__(self, data):
--        """
--        args:
--            data - The input data, should contain the fields 'template', 'search', 'gt_bbox'.
--            template_images: (N_t, batch, 3, H, W)
--            search_images: (N_s, batch, 3, H, W)
--        returns:
--            loss    - the training loss
--            status  -  dict containing detailed losses
--        """
--        # forward pass
--        out_dict = self.forward_pass(data)
--
--        # compute losses
--        loss, status = self.compute_losses(out_dict, data)
--
--        return loss, status
--
--    def forward_pass(self, data):
--        # currently only support 1 template and 1 search region
--        assert len(data['template_images']) == 1
--        assert len(data['search_images']) == 1
--
--        template_list = []
--        for i in range(self.settings.num_template):
--            template_img_i = data['template_images'][i].view(-1,
--                                                             *data['template_images'].shape[2:])  # (batch, 3, 128, 128)
--            # template_att_i = data['template_att'][i].view(-1, *data['template_att'].shape[2:])  # (batch, 128, 128)
--            template_list.append(template_img_i)
--
-+        self.feature_consistency_cfg = getattr(cfg.TRAIN, "FEATURE_CONSISTENCY", None) if cfg is not None else None
-+        self.feature_consistency_enabled = bool(
-+            getattr(self.feature_consistency_cfg, "ENABLE", False)
-+        ) if self.feature_consistency_cfg is not None else False
-+
-+    def __call__(self, data):
-+        """
-+        args:
-+            data - The input data, should contain the fields 'template', 'search', 'gt_bbox'.
-+            template_images: (N_t, batch, 3, H, W)
-+            search_images: (N_s, batch, 3, H, W)
-+        returns:
-+            loss    - the training loss
-+            status  -  dict containing detailed losses
-+        """
-+        # forward pass
-+        out_dict = self.forward_pass(data)
-+
-+        # compute losses
-+        loss, status = self.compute_losses(out_dict, data)
-+
-+        return loss, status
-+
-+    def forward_pass(self, data):
-+        # currently only support 1 template and 1 search region
-+        assert len(data['template_images']) == 1
-+        assert len(data['search_images']) == 1
-+
-+        template_list = []
-+        for i in range(self.settings.num_template):
-+            template_img_i = data['template_images'][i].view(-1,
-+                                                             *data['template_images'].shape[2:])  # (batch, 3, 128, 128)
-+            # template_att_i = data['template_att'][i].view(-1, *data['template_att'].shape[2:])  # (batch, 128, 128)
-+            template_list.append(template_img_i)
-+
-         search_img = data['search_images'][0].view(-1, *data['search_images'].shape[2:])  # (batch, 3, 320, 320)
--        # search_att = data['search_att'][0].view(-1, *data['search_att'].shape[2:])  # (batch, 320, 320)
--
--        box_mask_z = None
--        ce_keep_rate = None
--        if self.cfg.MODEL.BACKBONE.CE_LOC:
--            box_mask_z = generate_mask_cond(self.cfg, template_list[0].shape[0], template_list[0].device,
--                                            data['template_anno'][0])
--
--            ce_start_epoch = self.cfg.TRAIN.CE_START_EPOCH
--            ce_warm_epoch = self.cfg.TRAIN.CE_WARM_EPOCH
--            ce_keep_rate = adjust_keep_rate(data['epoch'], warmup_epochs=ce_start_epoch,
--                                                total_epochs=ce_start_epoch + ce_warm_epoch,
--                                                ITERS_PER_EPOCH=1,
--                                                base_keep_rate=self.cfg.MODEL.BACKBONE.CE_KEEP_RATIO[0])
--
--        if len(template_list) == 1:
--            template_list = template_list[0]
--
-+        # search_att = data['search_att'][0].view(-1, *data['search_att'].shape[2:])  # (batch, 320, 320)
-+
-+        box_mask_z = None
-+        ce_keep_rate = None
-+        if self.cfg.MODEL.BACKBONE.CE_LOC:
-+            box_mask_z = generate_mask_cond(self.cfg, template_list[0].shape[0], template_list[0].device,
-+                                            data['template_anno'][0])
-+
-+            ce_start_epoch = self.cfg.TRAIN.CE_START_EPOCH
-+            ce_warm_epoch = self.cfg.TRAIN.CE_WARM_EPOCH
-+            ce_keep_rate = adjust_keep_rate(data['epoch'], warmup_epochs=ce_start_epoch,
-+                                                total_epochs=ce_start_epoch + ce_warm_epoch,
-+                                                ITERS_PER_EPOCH=1,
-+                                                base_keep_rate=self.cfg.MODEL.BACKBONE.CE_KEEP_RATIO[0])
-+
-+        if len(template_list) == 1:
-+            template_list = template_list[0]
-+
-         out_dict = self.net(template=template_list,
-                             search=search_img,
-                             ce_template_mask=box_mask_z,
-                             ce_keep_rate=ce_keep_rate,
--                            return_last_attn=False)
-+                            return_last_attn=False,
-+                            return_search_features=self.feature_consistency_enabled)
-+
-+        if self.feature_consistency_enabled:
-+            if 'search_images_clean' not in data:
-+                available_keys = sorted(list(data.keys())) if hasattr(data, "keys") else []
-+                raise KeyError(
-+                    "Feature consistency requires data['search_images_clean']. "
-+                    "Available data keys: {}".format(available_keys)
-+                )
-+            search_clean_img = data['search_images_clean'][0].view(-1, *data['search_images_clean'].shape[2:])
-+            detach_clean = bool(getattr(self.feature_consistency_cfg, "DETACH_CLEAN", True))
-+            if detach_clean:
-+                with torch.no_grad():
-+                    clean_out = self.net(template=template_list,
-+                                         search=search_clean_img,
-+                                         ce_template_mask=box_mask_z,
-+                                         ce_keep_rate=ce_keep_rate,
-+                                         return_last_attn=False,
-+                                         return_search_features=True)
-+            else:
-+                clean_out = self.net(template=template_list,
-+                                     search=search_clean_img,
-+                                     ce_template_mask=box_mask_z,
-+                                     ce_keep_rate=ce_keep_rate,
-+                                     return_last_attn=False,
-+                                     return_search_features=True)
-+            out_dict['search_feat_rgssb_clean'] = clean_out['search_feat_rgssb']
- 
-         return out_dict
--
--    def compute_losses(self, pred_dict, gt_dict, return_status=True):
--        # gt gaussian map
--        gt_bbox = gt_dict['search_anno'][-1]  # (Ns, batch, 4) (x1,y1,w,h) -> (batch, 4)
--        gt_gaussian_maps = generate_heatmap(gt_dict['search_anno'], self.cfg.DATA.SEARCH.SIZE, self.cfg.MODEL.BACKBONE.STRIDE)
--        gt_gaussian_maps = gt_gaussian_maps[-1].unsqueeze(1)
--
--        # Get boxes
--        pred_boxes = pred_dict['pred_boxes']
--        if torch.isnan(pred_boxes).any():
--            raise ValueError("Network outputs is NAN! Stop Training")
--        num_queries = pred_boxes.size(1)
--        pred_boxes_vec = box_cxcywh_to_xyxy(pred_boxes).view(-1, 4)  # (B,N,4) --> (BN,4) (x1,y1,x2,y2)
--        gt_boxes_vec = box_xywh_to_xyxy(gt_bbox)[:, None, :].repeat((1, num_queries, 1)).view(-1, 4).clamp(min=0.0,
--                                                                                                           max=1.0)  # (B,4) --> (B,1,4) --> (B,N,4)
--        # compute giou and iou
--        try:
--            giou_loss, iou = self.objective['giou'](pred_boxes_vec, gt_boxes_vec)  # (BN,4) (BN,4)
--        except:
--            giou_loss, iou = torch.tensor(0.0).cuda(), torch.tensor(0.0).cuda()
--        # compute l1 loss
--        l1_loss = self.objective['l1'](pred_boxes_vec, gt_boxes_vec)  # (BN,4) (BN,4)
--        # compute location loss
--        if 'score_map' in pred_dict:
--            location_loss = self.objective['focal'](pred_dict['score_map'], gt_gaussian_maps)
--        else:
--            location_loss = torch.tensor(0.0, device=l1_loss.device)
-+
-+    def compute_losses(self, pred_dict, gt_dict, return_status=True):
-+        # gt gaussian map
-+        gt_bbox = gt_dict['search_anno'][-1]  # (Ns, batch, 4) (x1,y1,w,h) -> (batch, 4)
-+        gt_gaussian_maps = generate_heatmap(gt_dict['search_anno'], self.cfg.DATA.SEARCH.SIZE, self.cfg.MODEL.BACKBONE.STRIDE)
-+        gt_gaussian_maps = gt_gaussian_maps[-1].unsqueeze(1)
-+
-+        # Get boxes
-+        pred_boxes = pred_dict['pred_boxes']
-+        if torch.isnan(pred_boxes).any():
-+            raise ValueError("Network outputs is NAN! Stop Training")
-+        num_queries = pred_boxes.size(1)
-+        pred_boxes_vec = box_cxcywh_to_xyxy(pred_boxes).view(-1, 4)  # (B,N,4) --> (BN,4) (x1,y1,x2,y2)
-+        gt_boxes_vec = box_xywh_to_xyxy(gt_bbox)[:, None, :].repeat((1, num_queries, 1)).view(-1, 4).clamp(min=0.0,
-+                                                                                                           max=1.0)  # (B,4) --> (B,1,4) --> (B,N,4)
-+        # compute giou and iou
-+        try:
-+            giou_loss, iou = self.objective['giou'](pred_boxes_vec, gt_boxes_vec)  # (BN,4) (BN,4)
-+        except:
-+            giou_loss, iou = torch.tensor(0.0).cuda(), torch.tensor(0.0).cuda()
-+        # compute l1 loss
-+        l1_loss = self.objective['l1'](pred_boxes_vec, gt_boxes_vec)  # (BN,4) (BN,4)
-+        # compute location loss
-+        if 'score_map' in pred_dict:
-+            location_loss = self.objective['focal'](pred_dict['score_map'], gt_gaussian_maps)
-+        else:
-+            location_loss = torch.tensor(0.0, device=l1_loss.device)
-         # weighted sum
-         loss = self.loss_weight['giou'] * giou_loss + self.loss_weight['l1'] * l1_loss + self.loss_weight['focal'] * location_loss
-+        feature_loss = None
-+        if self.feature_consistency_enabled:
-+            feature_loss = self.compute_feature_consistency_loss(pred_dict)
-+            loss = loss + float(self.feature_consistency_cfg.WEIGHT) * feature_loss
-         if return_status:
--            # status for log
--            mean_iou = iou.detach().mean()
-+            # status for log
-+            mean_iou = iou.detach().mean()
-             status = {"Loss/total": loss.item(),
-                       "Loss/giou": giou_loss.item(),
-                       "Loss/l1": l1_loss.item(),
-                       "Loss/location": location_loss.item(),
-                       "IoU": mean_iou.item()}
-+            if feature_loss is not None:
-+                status["Loss/feature_consistency"] = feature_loss.item()
-             return loss, status
-         else:
-             return loss
-+
-+    def compute_feature_consistency_loss(self, pred_dict):
-+        if 'search_feat_rgssb' not in pred_dict:
-+            raise KeyError("Feature consistency requires pred_dict['search_feat_rgssb'].")
-+        if 'search_feat_rgssb_clean' not in pred_dict:
-+            raise KeyError("Feature consistency requires pred_dict['search_feat_rgssb_clean'].")
-+
-+        degraded_feat = pred_dict['search_feat_rgssb']
-+        clean_feat = pred_dict['search_feat_rgssb_clean']
-+        if bool(getattr(self.feature_consistency_cfg, "DETACH_CLEAN", True)):
-+            clean_feat = clean_feat.detach()
-+        if bool(getattr(self.feature_consistency_cfg, "NORMALIZE", True)):
-+            degraded_feat = F.normalize(degraded_feat, dim=-1)
-+            clean_feat = F.normalize(clean_feat, dim=-1)
-+
-+        loss_type = str(getattr(self.feature_consistency_cfg, "LOSS", "l1")).lower()
-+        if loss_type == "l1":
-+            feature_loss = F.l1_loss(degraded_feat, clean_feat)
-+        elif loss_type == "mse":
-+            feature_loss = F.mse_loss(degraded_feat, clean_feat)
-+        else:
-+            raise ValueError("Unsupported TRAIN.FEATURE_CONSISTENCY.LOSS: {}".format(loss_type))
-+        if not torch.isfinite(feature_loss):
-+            raise ValueError("Feature consistency loss is not finite.")
-+        return feature_loss
 diff --git a/lib/train/base_functions.py b/lib/train/base_functions.py
-index b581748..baac894 100644
+index b581748..28653c9 100644
 --- a/lib/train/base_functions.py
 +++ b/lib/train/base_functions.py
-@@ -1,111 +1,114 @@
--import torch
--from torch.utils.data.distributed import DistributedSampler
--# datasets related
--from lib.train.dataset import Lasot, Got10k, MSCOCOSeq, ImagenetVID, TrackingNet
--from lib.train.dataset import Lasot_lmdb, Got10k_lmdb, MSCOCOSeq_lmdb, ImagenetVID_lmdb, TrackingNet_lmdb
-+import torch
-+from torch.utils.data.distributed import DistributedSampler
-+# datasets related
-+from lib.train.dataset import Lasot, Got10k, MSCOCOSeq, ImagenetVID, TrackingNet
-+from lib.train.dataset import Lasot_lmdb, Got10k_lmdb, MSCOCOSeq_lmdb, ImagenetVID_lmdb, TrackingNet_lmdb
+@@ -6,6 +6,7 @@ from lib.train.dataset import Lasot_lmdb, Got10k_lmdb, MSCOCOSeq_lmdb, ImagenetV
  from lib.train.data import sampler, opencv_loader, processing, LTRLoader
  import lib.train.data.transforms as tfm
  from lib.utils.misc import is_main_process
--
--
--def update_settings(settings, cfg):
--    settings.print_interval = cfg.TRAIN.PRINT_INTERVAL
--    settings.search_area_factor = {'template': cfg.DATA.TEMPLATE.FACTOR,
--                                   'search': cfg.DATA.SEARCH.FACTOR}
--    settings.output_sz = {'template': cfg.DATA.TEMPLATE.SIZE,
--                          'search': cfg.DATA.SEARCH.SIZE}
--    settings.center_jitter_factor = {'template': cfg.DATA.TEMPLATE.CENTER_JITTER,
--                                     'search': cfg.DATA.SEARCH.CENTER_JITTER}
--    settings.scale_jitter_factor = {'template': cfg.DATA.TEMPLATE.SCALE_JITTER,
--                                    'search': cfg.DATA.SEARCH.SCALE_JITTER}
--    settings.grad_clip_norm = cfg.TRAIN.GRAD_CLIP_NORM
--    settings.print_stats = None
--    settings.batchsize = cfg.TRAIN.BATCH_SIZE
--    settings.scheduler_type = cfg.TRAIN.SCHEDULER.TYPE
--
--
--def names2datasets(name_list: list, settings, image_loader):
--    assert isinstance(name_list, list)
--    datasets = []
--    for name in name_list:
--        assert name in ["LASOT", "GOT10K_vottrain", "GOT10K_votval", "GOT10K_train_full", "GOT10K_official_val",
--                        "COCO17", "VID", "TRACKINGNET"]
--        if name == "LASOT":
--            if settings.use_lmdb:
--                print("Building lasot dataset from lmdb")
--                datasets.append(Lasot_lmdb(settings.env.lasot_lmdb_dir, split='train', image_loader=image_loader))
--            else:
--                datasets.append(Lasot(settings.env.lasot_dir, split='train', image_loader=image_loader))
--        if name == "GOT10K_vottrain":
--            if settings.use_lmdb:
--                print("Building got10k from lmdb")
--                datasets.append(Got10k_lmdb(settings.env.got10k_lmdb_dir, split='vottrain', image_loader=image_loader))
--            else:
--                datasets.append(Got10k(settings.env.got10k_dir, split='vottrain', image_loader=image_loader))
--        if name == "GOT10K_train_full":
--            if settings.use_lmdb:
--                print("Building got10k_train_full from lmdb")
--                datasets.append(Got10k_lmdb(settings.env.got10k_lmdb_dir, split='train_full', image_loader=image_loader))
--            else:
--                datasets.append(Got10k(settings.env.got10k_dir, split='train_full', image_loader=image_loader))
--        if name == "GOT10K_votval":
--            if settings.use_lmdb:
--                print("Building got10k from lmdb")
--                datasets.append(Got10k_lmdb(settings.env.got10k_lmdb_dir, split='votval', image_loader=image_loader))
--            else:
--                datasets.append(Got10k(settings.env.got10k_dir, split='votval', image_loader=image_loader))
--        if name == "GOT10K_official_val":
--            if settings.use_lmdb:
--                raise ValueError("Not implement")
--            else:
--                datasets.append(Got10k(settings.env.got10k_val_dir, split=None, image_loader=image_loader))
--        if name == "COCO17":
--            if settings.use_lmdb:
--                print("Building COCO2017 from lmdb")
--                datasets.append(MSCOCOSeq_lmdb(settings.env.coco_lmdb_dir, version="2017", image_loader=image_loader))
--            else:
--                datasets.append(MSCOCOSeq(settings.env.coco_dir, version="2017", image_loader=image_loader))
--        if name == "VID":
--            if settings.use_lmdb:
--                print("Building VID from lmdb")
--                datasets.append(ImagenetVID_lmdb(settings.env.imagenet_lmdb_dir, image_loader=image_loader))
--            else:
--                datasets.append(ImagenetVID(settings.env.imagenet_dir, image_loader=image_loader))
--        if name == "TRACKINGNET":
--            if settings.use_lmdb:
--                print("Building TrackingNet from lmdb")
--                datasets.append(TrackingNet_lmdb(settings.env.trackingnet_lmdb_dir, image_loader=image_loader))
--            else:
--                # raise ValueError("NOW WE CAN ONLY USE TRACKINGNET FROM LMDB")
--                datasets.append(TrackingNet(settings.env.trackingnet_dir, image_loader=image_loader))
--    return datasets
--
--
--def build_dataloaders(cfg, settings):
--    # Data transform
--    transform_joint = tfm.Transform(tfm.ToGrayscale(probability=0.05),
--                                    tfm.RandomHorizontalFlip(probability=0.5))
--
--    transform_train = tfm.Transform(tfm.ToTensorAndJitter(0.2),
--                                    tfm.RandomHorizontalFlip_Norm(probability=0.5),
--                                    tfm.Normalize(mean=cfg.DATA.MEAN, std=cfg.DATA.STD))
--
--    transform_val = tfm.Transform(tfm.ToTensor(),
--                                  tfm.Normalize(mean=cfg.DATA.MEAN, std=cfg.DATA.STD))
--
--    # The tracking pairs processing module
--    output_sz = settings.output_sz
--    search_area_factor = settings.search_area_factor
--
--    data_processing_train = processing.STARKProcessing(search_area_factor=search_area_factor,
--                                                       output_sz=output_sz,
--                                                       center_jitter_factor=settings.center_jitter_factor,
--                                                       scale_jitter_factor=settings.scale_jitter_factor,
 +from lib.train.freeze import apply_freeze_mode
-+
-+
-+def update_settings(settings, cfg):
-+    settings.print_interval = cfg.TRAIN.PRINT_INTERVAL
-+    settings.search_area_factor = {'template': cfg.DATA.TEMPLATE.FACTOR,
-+                                   'search': cfg.DATA.SEARCH.FACTOR}
-+    settings.output_sz = {'template': cfg.DATA.TEMPLATE.SIZE,
-+                          'search': cfg.DATA.SEARCH.SIZE}
-+    settings.center_jitter_factor = {'template': cfg.DATA.TEMPLATE.CENTER_JITTER,
-+                                     'search': cfg.DATA.SEARCH.CENTER_JITTER}
-+    settings.scale_jitter_factor = {'template': cfg.DATA.TEMPLATE.SCALE_JITTER,
-+                                    'search': cfg.DATA.SEARCH.SCALE_JITTER}
-+    settings.grad_clip_norm = cfg.TRAIN.GRAD_CLIP_NORM
-+    settings.print_stats = None
-+    settings.batchsize = cfg.TRAIN.BATCH_SIZE
-+    settings.scheduler_type = cfg.TRAIN.SCHEDULER.TYPE
-+
-+
-+def names2datasets(name_list: list, settings, image_loader):
-+    assert isinstance(name_list, list)
-+    datasets = []
-+    for name in name_list:
-+        assert name in ["LASOT", "GOT10K_vottrain", "GOT10K_votval", "GOT10K_train_full", "GOT10K_official_val",
-+                        "COCO17", "VID", "TRACKINGNET"]
-+        if name == "LASOT":
-+            if settings.use_lmdb:
-+                print("Building lasot dataset from lmdb")
-+                datasets.append(Lasot_lmdb(settings.env.lasot_lmdb_dir, split='train', image_loader=image_loader))
-+            else:
-+                datasets.append(Lasot(settings.env.lasot_dir, split='train', image_loader=image_loader))
-+        if name == "GOT10K_vottrain":
-+            if settings.use_lmdb:
-+                print("Building got10k from lmdb")
-+                datasets.append(Got10k_lmdb(settings.env.got10k_lmdb_dir, split='vottrain', image_loader=image_loader))
-+            else:
-+                datasets.append(Got10k(settings.env.got10k_dir, split='vottrain', image_loader=image_loader))
-+        if name == "GOT10K_train_full":
-+            if settings.use_lmdb:
-+                print("Building got10k_train_full from lmdb")
-+                datasets.append(Got10k_lmdb(settings.env.got10k_lmdb_dir, split='train_full', image_loader=image_loader))
-+            else:
-+                datasets.append(Got10k(settings.env.got10k_dir, split='train_full', image_loader=image_loader))
-+        if name == "GOT10K_votval":
-+            if settings.use_lmdb:
-+                print("Building got10k from lmdb")
-+                datasets.append(Got10k_lmdb(settings.env.got10k_lmdb_dir, split='votval', image_loader=image_loader))
-+            else:
-+                datasets.append(Got10k(settings.env.got10k_dir, split='votval', image_loader=image_loader))
-+        if name == "GOT10K_official_val":
-+            if settings.use_lmdb:
-+                raise ValueError("Not implement")
-+            else:
-+                datasets.append(Got10k(settings.env.got10k_val_dir, split=None, image_loader=image_loader))
-+        if name == "COCO17":
-+            if settings.use_lmdb:
-+                print("Building COCO2017 from lmdb")
-+                datasets.append(MSCOCOSeq_lmdb(settings.env.coco_lmdb_dir, version="2017", image_loader=image_loader))
-+            else:
-+                datasets.append(MSCOCOSeq(settings.env.coco_dir, version="2017", image_loader=image_loader))
-+        if name == "VID":
-+            if settings.use_lmdb:
-+                print("Building VID from lmdb")
-+                datasets.append(ImagenetVID_lmdb(settings.env.imagenet_lmdb_dir, image_loader=image_loader))
-+            else:
-+                datasets.append(ImagenetVID(settings.env.imagenet_dir, image_loader=image_loader))
-+        if name == "TRACKINGNET":
-+            if settings.use_lmdb:
-+                print("Building TrackingNet from lmdb")
-+                datasets.append(TrackingNet_lmdb(settings.env.trackingnet_lmdb_dir, image_loader=image_loader))
-+            else:
-+                # raise ValueError("NOW WE CAN ONLY USE TRACKINGNET FROM LMDB")
-+                datasets.append(TrackingNet(settings.env.trackingnet_dir, image_loader=image_loader))
-+    return datasets
-+
-+
-+def build_dataloaders(cfg, settings):
-+    # Data transform
-+    transform_joint = tfm.Transform(tfm.ToGrayscale(probability=0.05),
-+                                    tfm.RandomHorizontalFlip(probability=0.5))
-+
-+    transform_train = tfm.Transform(tfm.ToTensorAndJitter(0.2),
-+                                    tfm.RandomHorizontalFlip_Norm(probability=0.5),
-+                                    tfm.Normalize(mean=cfg.DATA.MEAN, std=cfg.DATA.STD))
-+
-+    transform_val = tfm.Transform(tfm.ToTensor(),
-+                                  tfm.Normalize(mean=cfg.DATA.MEAN, std=cfg.DATA.STD))
-+
-+    # The tracking pairs processing module
-+    output_sz = settings.output_sz
-+    search_area_factor = settings.search_area_factor
-+
-+    data_processing_train = processing.STARKProcessing(search_area_factor=search_area_factor,
-+                                                       output_sz=output_sz,
-+                                                       center_jitter_factor=settings.center_jitter_factor,
-+                                                       scale_jitter_factor=settings.scale_jitter_factor,
+ 
+ 
+ def update_settings(settings, cfg):
+@@ -104,6 +105,9 @@ def build_dataloaders(cfg, settings):
                                                         mode='sequence',
                                                         transform=transform_train,
                                                         joint_transform=transform_joint,
 +                                                       degradation_cfg=cfg.DATA.DEGRADATION,
 +                                                       feature_consistency_cfg=cfg.TRAIN.FEATURE_CONSISTENCY,
++                                                       response_consistency_cfg=cfg.TRAIN.RESPONSE_CONSISTENCY,
                                                         settings=settings)
--
-+
+ 
      data_processing_val = processing.STARKProcessing(search_area_factor=search_area_factor,
-                                                      output_sz=output_sz,
-                                                      center_jitter_factor=settings.center_jitter_factor,
-@@ -113,80 +116,86 @@ def build_dataloaders(cfg, settings):
+@@ -113,6 +117,8 @@ def build_dataloaders(cfg, settings):
                                                       mode='sequence',
                                                       transform=transform_val,
                                                       joint_transform=transform_joint,
 +                                                     feature_consistency_cfg=cfg.TRAIN.FEATURE_CONSISTENCY,
++                                                     response_consistency_cfg=cfg.TRAIN.RESPONSE_CONSISTENCY,
                                                       settings=settings)
--
--    # Train sampler and loader
--    settings.num_template = getattr(cfg.DATA.TEMPLATE, "NUMBER", 1)
--    settings.num_search = getattr(cfg.DATA.SEARCH, "NUMBER", 1)
--    sampler_mode = getattr(cfg.DATA, "SAMPLER_MODE", "causal")
--    train_cls = getattr(cfg.TRAIN, "TRAIN_CLS", False)
--    print("sampler_mode", sampler_mode)
--    dataset_train = sampler.TrackingSampler(datasets=names2datasets(cfg.DATA.TRAIN.DATASETS_NAME, settings, opencv_loader),
--                                            p_datasets=cfg.DATA.TRAIN.DATASETS_RATIO,
--                                            samples_per_epoch=cfg.DATA.TRAIN.SAMPLE_PER_EPOCH,
--                                            max_gap=cfg.DATA.MAX_SAMPLE_INTERVAL, num_search_frames=settings.num_search,
--                                            num_template_frames=settings.num_template, processing=data_processing_train,
--                                            frame_sample_mode=sampler_mode, train_cls=train_cls)
--
--    train_sampler = DistributedSampler(dataset_train) if settings.local_rank != -1 else None
--    shuffle = False if settings.local_rank != -1 else True
--
--    loader_train = LTRLoader('train', dataset_train, training=True, batch_size=cfg.TRAIN.BATCH_SIZE, shuffle=shuffle,
--                             num_workers=cfg.TRAIN.NUM_WORKER, drop_last=True, stack_dim=1, sampler=train_sampler)
--
--    # Validation samplers and loaders
--    dataset_val = sampler.TrackingSampler(datasets=names2datasets(cfg.DATA.VAL.DATASETS_NAME, settings, opencv_loader),
--                                          p_datasets=cfg.DATA.VAL.DATASETS_RATIO,
--                                          samples_per_epoch=cfg.DATA.VAL.SAMPLE_PER_EPOCH,
--                                          max_gap=cfg.DATA.MAX_SAMPLE_INTERVAL, num_search_frames=settings.num_search,
--                                          num_template_frames=settings.num_template, processing=data_processing_val,
--                                          frame_sample_mode=sampler_mode, train_cls=train_cls)
--    val_sampler = DistributedSampler(dataset_val) if settings.local_rank != -1 else None
--    loader_val = LTRLoader('val', dataset_val, training=False, batch_size=cfg.TRAIN.BATCH_SIZE,
--                           num_workers=cfg.TRAIN.NUM_WORKER, drop_last=True, stack_dim=1, sampler=val_sampler,
--                           epoch_interval=cfg.TRAIN.VAL_EPOCH_INTERVAL)
--
--    return loader_train, loader_val
--
--
-+
-+    # Train sampler and loader
-+    settings.num_template = getattr(cfg.DATA.TEMPLATE, "NUMBER", 1)
-+    settings.num_search = getattr(cfg.DATA.SEARCH, "NUMBER", 1)
-+    sampler_mode = getattr(cfg.DATA, "SAMPLER_MODE", "causal")
-+    train_cls = getattr(cfg.TRAIN, "TRAIN_CLS", False)
-+    print("sampler_mode", sampler_mode)
-+    dataset_train = sampler.TrackingSampler(datasets=names2datasets(cfg.DATA.TRAIN.DATASETS_NAME, settings, opencv_loader),
-+                                            p_datasets=cfg.DATA.TRAIN.DATASETS_RATIO,
-+                                            samples_per_epoch=cfg.DATA.TRAIN.SAMPLE_PER_EPOCH,
-+                                            max_gap=cfg.DATA.MAX_SAMPLE_INTERVAL, num_search_frames=settings.num_search,
-+                                            num_template_frames=settings.num_template, processing=data_processing_train,
-+                                            frame_sample_mode=sampler_mode, train_cls=train_cls)
-+
-+    train_sampler = DistributedSampler(dataset_train) if settings.local_rank != -1 else None
-+    shuffle = False if settings.local_rank != -1 else True
-+
-+    loader_train = LTRLoader('train', dataset_train, training=True, batch_size=cfg.TRAIN.BATCH_SIZE, shuffle=shuffle,
-+                             num_workers=cfg.TRAIN.NUM_WORKER, drop_last=True, stack_dim=1, sampler=train_sampler)
-+
-+    # Validation samplers and loaders
-+    dataset_val = sampler.TrackingSampler(datasets=names2datasets(cfg.DATA.VAL.DATASETS_NAME, settings, opencv_loader),
-+                                          p_datasets=cfg.DATA.VAL.DATASETS_RATIO,
-+                                          samples_per_epoch=cfg.DATA.VAL.SAMPLE_PER_EPOCH,
-+                                          max_gap=cfg.DATA.MAX_SAMPLE_INTERVAL, num_search_frames=settings.num_search,
-+                                          num_template_frames=settings.num_template, processing=data_processing_val,
-+                                          frame_sample_mode=sampler_mode, train_cls=train_cls)
-+    val_sampler = DistributedSampler(dataset_val) if settings.local_rank != -1 else None
-+    loader_val = LTRLoader('val', dataset_val, training=False, batch_size=cfg.TRAIN.BATCH_SIZE,
-+                           num_workers=cfg.TRAIN.NUM_WORKER, drop_last=True, stack_dim=1, sampler=val_sampler,
-+                           epoch_interval=cfg.TRAIN.VAL_EPOCH_INTERVAL)
-+
-+    return loader_train, loader_val
-+
-+
+ 
+     # Train sampler and loader
+@@ -150,6 +156,7 @@ def build_dataloaders(cfg, settings):
+ 
+ 
  def get_optimizer_scheduler(net, cfg):
 +    apply_freeze_mode(net, cfg)
      train_cls = getattr(cfg.TRAIN, "TRAIN_CLS", False)
--    if train_cls:
--        print("Only training classification head. Learnable parameters are shown below.")
--        param_dicts = [
--            {"params": [p for n, p in net.named_parameters() if "cls" in n and p.requires_grad]}
--        ]
--
--        for n, p in net.named_parameters():
--            if "cls" not in n:
--                p.requires_grad = False
--            else:
--                print(n)
-+    if train_cls:
-+        print("Only training classification head. Learnable parameters are shown below.")
-+        param_dicts = [
-+            {"params": [p for n, p in net.named_parameters() if "cls" in n and p.requires_grad]}
-+        ]
-+
-+        for n, p in net.named_parameters():
-+            if "cls" not in n:
-+                p.requires_grad = False
-+            else:
-+                print(n)
-     else:
-         param_dicts = [
-             {"params": [p for n, p in net.named_parameters() if "backbone" not in n and p.requires_grad]},
-             {
-                 "params": [p for n, p in net.named_parameters() if "backbone" in n and p.requires_grad],
--                "lr": cfg.TRAIN.LR * cfg.TRAIN.BACKBONE_MULTIPLIER,
--            },
--        ]
--        if is_main_process():
--            print("Learnable parameters are shown below.")
-+                "lr": cfg.TRAIN.LR * cfg.TRAIN.BACKBONE_MULTIPLIER,
-+            },
-+        ]
-+        if is_main_process():
-+            print("Learnable parameters are shown below.")
-             for n, p in net.named_parameters():
+     if train_cls:
+         print("Only training classification head. Learnable parameters are shown below.")
+@@ -176,6 +183,10 @@ def get_optimizer_scheduler(net, cfg):
                  if p.requires_grad:
                      print(n)
  
@@ -4106,25 +613,74 @@ index b581748..baac894 100644
      if cfg.TRAIN.OPTIMIZER == "ADAMW":
          optimizer = torch.optim.AdamW(param_dicts, lr=cfg.TRAIN.LR,
                                        weight_decay=cfg.TRAIN.WEIGHT_DECAY)
--    else:
--        raise ValueError("Unsupported Optimizer")
--    if cfg.TRAIN.SCHEDULER.TYPE == 'step':
--        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, cfg.TRAIN.LR_DROP_EPOCH)
--    elif cfg.TRAIN.SCHEDULER.TYPE == "Mstep":
--        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,
--                                                            milestones=cfg.TRAIN.SCHEDULER.MILESTONES,
--                                                            gamma=cfg.TRAIN.SCHEDULER.GAMMA)
--    else:
--        raise ValueError("Unsupported scheduler")
--    return optimizer, lr_scheduler
-+    else:
-+        raise ValueError("Unsupported Optimizer")
-+    if cfg.TRAIN.SCHEDULER.TYPE == 'step':
-+        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, cfg.TRAIN.LR_DROP_EPOCH)
-+    elif cfg.TRAIN.SCHEDULER.TYPE == "Mstep":
-+        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,
-+                                                            milestones=cfg.TRAIN.SCHEDULER.MILESTONES,
-+                                                            gamma=cfg.TRAIN.SCHEDULER.GAMMA)
-+    else:
-+        raise ValueError("Unsupported scheduler")
-+    return optimizer, lr_scheduler
+diff --git a/lib/train/data/processing.py b/lib/train/data/processing.py
+index 3accc9e..4decaa2 100644
+--- a/lib/train/data/processing.py
++++ b/lib/train/data/processing.py
+@@ -3,6 +3,7 @@ import torchvision.transforms as transforms
+ from lib.utils import TensorDict
+ import lib.train.data.processing_utils as prutils
+ import torch.nn.functional as F
++from lib.train.data.degradation import TrainingDegradationAugmentor
+ 
+ 
+ def stack_tensors(x):
+@@ -46,7 +47,8 @@ class STARKProcessing(BaseProcessing):
+     """
+ 
+     def __init__(self, search_area_factor, output_sz, center_jitter_factor, scale_jitter_factor,
+-                 mode='pair', settings=None, *args, **kwargs):
++                 mode='pair', settings=None, degradation_cfg=None, feature_consistency_cfg=None,
++                 response_consistency_cfg=None, *args, **kwargs):
+         """
+         args:
+             search_area_factor - The size of the search region  relative to the target size.
+@@ -65,6 +67,14 @@ class STARKProcessing(BaseProcessing):
+         self.scale_jitter_factor = scale_jitter_factor
+         self.mode = mode
+         self.settings = settings
++        self.degradation = TrainingDegradationAugmentor(degradation_cfg) if degradation_cfg is not None else None
++        self.feature_consistency_enabled = bool(
++            getattr(feature_consistency_cfg, "ENABLE", False)
++        ) if feature_consistency_cfg is not None else False
++        self.response_consistency_enabled = bool(
++            getattr(response_consistency_cfg, "ENABLE", False)
++        ) if response_consistency_cfg is not None else False
++        self.clean_search_enabled = self.feature_consistency_enabled or self.response_consistency_enabled
+ 
+     def _get_jittered_box(self, box, mode):
+         """ Jitter the input box
+@@ -98,6 +108,9 @@ class STARKProcessing(BaseProcessing):
+             data['search_images'], data['search_anno'], data['search_masks'] = self.transform['joint'](
+                 image=data['search_images'], bbox=data['search_anno'], mask=data['search_masks'], new_roll=False)
+ 
++        if self.degradation is not None:
++            self.degradation.begin_sample()
++
+         for s in ['template', 'search']:
+             assert self.mode == 'sequence' or len(data[s + '_images']) == 1, \
+                 "In pair mode, num train/test frames must be 1"
+@@ -118,9 +131,23 @@ class STARKProcessing(BaseProcessing):
+             crops, boxes, att_mask, mask_crops = prutils.jittered_center_crop(data[s + '_images'], jittered_anno,
+                                                                               data[s + '_anno'], self.search_area_factor[s],
+                                                                               self.output_sz[s], masks=data[s + '_masks'])
++            clean_search_crops = None
++            if self.clean_search_enabled and s == 'search':
++                clean_search_crops = [crop.copy() for crop in crops]
++            if self.degradation is not None:
++                crops = self.degradation.apply(crops, role=s)
+             # Apply transforms
+             data[s + '_images'], data[s + '_anno'], data[s + '_att'], data[s + '_masks'] = self.transform[s](
+                 image=crops, bbox=boxes, att=att_mask, mask=mask_crops, joint=False)
++            if clean_search_crops is not None:
++                clean_images, clean_boxes, clean_att, clean_masks = self.transform[s](
++                    image=clean_search_crops,
++                    bbox=boxes,
++                    att=att_mask,
++                    mask=mask_crops,
++                    joint=False,
++                    new_roll=False)
++                data['search_images_clean'] = clean_images
+ 
+             # 2021.1.9 Check whether elements in data[s + '_att'] is all 1
+             # Note that type of data[s + '_att'] is tuple, type of ele is torch.tensor
