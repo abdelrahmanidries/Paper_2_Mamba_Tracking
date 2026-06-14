@@ -1,0 +1,29 @@
+{
+  "clean_otb_root": "/media/abdel/4484139E5D690B76/otb",
+  "output_root": "datasets/tiny_sot/degraded",
+  "sequences": [
+    "Car1",
+    "David2",
+    "Coke",
+    "Walking",
+    "Walking2",
+    "FaceOcc1",
+    "Dog1",
+    "Deer",
+    "Football",
+    "BlurBody",
+    "BlurCar2",
+    "BlurFace",
+    "Box"
+  ],
+  "tracker": "ostrack",
+  "config": "vitb_256_mae_ce_32x4_ep300",
+  "ostrack_root": "external/OSTrack",
+  "results_csv": "experiments/baseline_results.csv",
+  "runs": [
+    {"degradation": "clean", "severity": "none", "seed": 0},
+    {"degradation": "motion_blur", "severity": "medium", "seed": 42},
+    {"degradation": "low_resolution", "severity": "medium", "seed": 42},
+    {"degradation": "gaussian_noise", "severity": "medium", "seed": 42}
+  ]
+}
