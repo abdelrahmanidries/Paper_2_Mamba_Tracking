@@ -1,0 +1,33 @@
+sequence,condition,degradation,severity,seed,baseline_auc,hpc_rgssb_auc,auc_change,baseline_precision_20,hpc_rgssb_precision_20,precision_20_change,baseline_mean_center_error,hpc_rgssb_mean_center_error,center_error_change,best_model,note
+uav_car10,clean,clean,none,0,0.863690,0.855939,-0.007751,1.000000,1.000000,+0.000000,1.767431,1.873509,+0.106078,baseline,OSTrack baseline has higher AUC
+uav_car10,motion_blur_medium,motion_blur,medium,42,0.829978,0.839935,+0.009957,1.000000,1.000000,+0.000000,1.874678,2.015716,+0.141038,hpc_rgssb,HPC RG-SSB improves AUC over baseline
+uav_car10,low_resolution_medium,low_resolution,medium,42,0.866897,0.862683,-0.004214,1.000000,1.000000,+0.000000,1.709015,1.762816,+0.053801,baseline,OSTrack baseline has higher AUC
+uav_car10,gaussian_noise_medium,gaussian_noise,medium,42,0.868384,0.867383,-0.001001,1.000000,1.000000,+0.000000,1.643065,1.710973,+0.067908,baseline,OSTrack baseline has higher AUC
+uav_person1,clean,clean,none,0,0.855612,0.849540,-0.006072,1.000000,1.000000,+0.000000,2.816489,3.007079,+0.190590,baseline,OSTrack baseline has higher AUC
+uav_person1,motion_blur_medium,motion_blur,medium,42,0.854149,0.853121,-0.001028,1.000000,1.000000,+0.000000,2.830008,3.061380,+0.231372,baseline,OSTrack baseline has higher AUC
+uav_person1,low_resolution_medium,low_resolution,medium,42,0.858226,0.851882,-0.006344,1.000000,1.000000,+0.000000,2.828360,3.087135,+0.258775,baseline,OSTrack baseline has higher AUC
+uav_person1,gaussian_noise_medium,gaussian_noise,medium,42,0.850878,0.845450,-0.005428,1.000000,1.000000,+0.000000,2.765904,2.902830,+0.136926,baseline,OSTrack baseline has higher AUC
+uav_truck1,clean,clean,none,0,0.909330,0.904412,-0.004918,0.991361,0.978402,-0.012959,4.979477,5.017188,+0.037711,baseline,OSTrack baseline has higher AUC
+uav_truck1,motion_blur_medium,motion_blur,medium,42,0.877874,0.875607,-0.002267,0.946004,0.946004,+0.000000,7.053147,7.191486,+0.138339,baseline,OSTrack baseline has higher AUC
+uav_truck1,low_resolution_medium,low_resolution,medium,42,0.905181,0.900498,-0.004683,0.987041,0.978402,-0.008639,5.120153,5.096191,-0.023962,baseline,OSTrack baseline has higher AUC
+uav_truck1,gaussian_noise_medium,gaussian_noise,medium,42,0.895323,0.882129,-0.013194,0.974082,0.961123,-0.012959,5.843008,5.997738,+0.154730,baseline,OSTrack baseline has higher AUC
+uav_bike1,clean,clean,none,0,0.851681,0.825572,-0.026109,0.997407,0.988655,-0.008752,4.968024,5.739062,+0.771038,baseline,OSTrack baseline has higher AUC
+uav_bike1,motion_blur_medium,motion_blur,medium,42,0.830919,0.805831,-0.025088,0.965640,0.964019,-0.001621,6.075747,7.144278,+1.068531,baseline,OSTrack baseline has higher AUC
+uav_bike1,low_resolution_medium,low_resolution,medium,42,0.868633,0.854897,-0.013736,0.996110,0.992220,-0.003890,4.240974,4.671670,+0.430696,baseline,OSTrack baseline has higher AUC
+uav_bike1,gaussian_noise_medium,gaussian_noise,medium,42,0.873518,0.869105,-0.004413,0.995462,0.996759,+0.001297,3.923043,3.993073,+0.070030,baseline,OSTrack baseline has higher AUC
+uav_boat1,clean,clean,none,0,0.907177,0.902496,-0.004681,1.000000,1.000000,+0.000000,4.179891,4.141109,-0.038782,baseline,OSTrack baseline has higher AUC
+uav_boat1,motion_blur_medium,motion_blur,medium,42,0.891946,0.899012,+0.007066,1.000000,1.000000,+0.000000,3.637164,3.892462,+0.255298,hpc_rgssb,HPC RG-SSB improves AUC over baseline
+uav_boat1,low_resolution_medium,low_resolution,medium,42,0.907342,0.903660,-0.003682,1.000000,1.000000,+0.000000,4.106702,4.163168,+0.056466,baseline,OSTrack baseline has higher AUC
+uav_boat1,gaussian_noise_medium,gaussian_noise,medium,42,0.901298,0.899902,-0.001396,1.000000,1.000000,+0.000000,4.314402,4.164065,-0.150337,baseline,OSTrack baseline has higher AUC
+uav_building1,clean,clean,none,0,0.856573,0.852857,-0.003716,1.000000,1.000000,+0.000000,1.579833,1.612973,+0.033140,baseline,OSTrack baseline has higher AUC
+uav_building1,motion_blur_medium,motion_blur,medium,42,0.866347,0.864954,-0.001393,1.000000,1.000000,+0.000000,1.662908,1.660322,-0.002586,baseline,OSTrack baseline has higher AUC
+uav_building1,low_resolution_medium,low_resolution,medium,42,0.861661,0.855961,-0.005700,1.000000,1.000000,+0.000000,1.578279,1.635272,+0.056993,baseline,OSTrack baseline has higher AUC
+uav_building1,gaussian_noise_medium,gaussian_noise,medium,42,0.840149,0.838650,-0.001499,1.000000,1.000000,+0.000000,2.126383,2.122127,-0.004256,baseline,OSTrack baseline has higher AUC
+uav_person3,clean,clean,none,0,0.859261,0.850084,-0.009177,1.000000,1.000000,+0.000000,2.070879,2.184885,+0.114006,baseline,OSTrack baseline has higher AUC
+uav_person3,motion_blur_medium,motion_blur,medium,42,0.827018,0.844109,+0.017091,1.000000,1.000000,+0.000000,2.245145,2.361317,+0.116172,hpc_rgssb,HPC RG-SSB improves AUC over baseline
+uav_person3,low_resolution_medium,low_resolution,medium,42,0.862664,0.854257,-0.008407,1.000000,1.000000,+0.000000,2.059074,2.171682,+0.112608,baseline,OSTrack baseline has higher AUC
+uav_person3,gaussian_noise_medium,gaussian_noise,medium,42,0.856859,0.843324,-0.013535,1.000000,1.000000,+0.000000,2.087122,2.253938,+0.166816,baseline,OSTrack baseline has higher AUC
+uav_car11,clean,clean,none,0,0.483503,0.488410,+0.004907,0.792285,0.818991,+0.026706,nan,nan,nan,hpc_rgssb,HPC RG-SSB improves AUC over baseline
+uav_car11,motion_blur_medium,motion_blur,medium,42,0.027000,0.030673,+0.003673,0.032641,0.044510,+0.011869,nan,nan,nan,hpc_rgssb,HPC RG-SSB improves AUC over baseline
+uav_car11,low_resolution_medium,low_resolution,medium,42,0.361078,0.110497,-0.250581,0.727003,0.210682,-0.516321,nan,nan,nan,baseline,OSTrack baseline has higher AUC
+uav_car11,gaussian_noise_medium,gaussian_noise,medium,42,0.125657,0.336634,+0.210977,0.243323,0.706231,+0.462908,nan,nan,nan,hpc_rgssb,HPC RG-SSB improves AUC over baseline
