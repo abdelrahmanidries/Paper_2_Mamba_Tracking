@@ -1,0 +1,53 @@
+sequence,condition,degradation,severity,seed,baseline_auc,hpc_rgssb_auc,auc_change,baseline_precision_20,hpc_rgssb_precision_20,precision_20_change,baseline_mean_center_error,hpc_rgssb_mean_center_error,center_error_change,best_model,note
+Car1,clean,clean,none,0,0.575995,0.614240,+0.038245,0.746078,0.806863,+0.060785,16.455626,13.180775,-3.274851,hpc_rgssb,HPC RG-SSB improves AUC over baseline
+Car1,motion_blur_medium,motion_blur,medium,42,0.157212,0.193254,+0.036042,0.198039,0.259804,+0.061765,82.957024,75.900475,-7.056549,hpc_rgssb,HPC RG-SSB improves AUC over baseline
+Car1,low_resolution_medium,low_resolution,medium,42,0.214881,0.227820,+0.012939,0.267647,0.301961,+0.034314,55.176579,57.360058,+2.183479,hpc_rgssb,HPC RG-SSB improves AUC over baseline
+Car1,gaussian_noise_medium,gaussian_noise,medium,42,0.207270,0.260794,+0.053524,0.250980,0.329412,+0.078432,64.898727,57.147617,-7.751110,hpc_rgssb,HPC RG-SSB improves AUC over baseline
+David2,clean,clean,none,0,0.794439,0.797666,+0.003227,1.000000,1.000000,+0.000000,1.541015,1.526944,-0.014071,hpc_rgssb,HPC RG-SSB improves AUC over baseline
+David2,motion_blur_medium,motion_blur,medium,42,0.549680,0.616959,+0.067279,0.970205,0.970205,+0.000000,8.078309,6.209242,-1.869067,hpc_rgssb,HPC RG-SSB improves AUC over baseline
+David2,low_resolution_medium,low_resolution,medium,42,0.806258,0.802201,-0.004057,1.000000,1.000000,+0.000000,1.516361,1.492518,-0.023843,baseline,OSTrack baseline has higher AUC
+David2,gaussian_noise_medium,gaussian_noise,medium,42,0.817542,0.779339,-0.038203,1.000000,0.988827,-0.011173,1.885668,2.576079,+0.690411,baseline,OSTrack baseline has higher AUC
+Coke,clean,clean,none,0,0.758259,0.762751,+0.004492,0.958763,0.958763,+0.000000,5.797408,6.259025,+0.461617,hpc_rgssb,HPC RG-SSB improves AUC over baseline
+Coke,motion_blur_medium,motion_blur,medium,42,0.700384,0.722126,+0.021742,0.945017,0.934708,-0.010309,7.648194,7.901353,+0.253159,hpc_rgssb,HPC RG-SSB improves AUC over baseline
+Coke,low_resolution_medium,low_resolution,medium,42,0.745875,0.750026,+0.004151,0.945017,0.948454,+0.003437,6.493616,7.011554,+0.517938,hpc_rgssb,HPC RG-SSB improves AUC over baseline
+Coke,gaussian_noise_medium,gaussian_noise,medium,42,0.746759,0.748460,+0.001701,0.951890,0.945017,-0.006873,6.327523,6.569547,+0.242024,hpc_rgssb,HPC RG-SSB improves AUC over baseline
+Walking,clean,clean,none,0,0.787297,0.780929,-0.006368,1.000000,1.000000,+0.000000,1.684909,1.795651,+0.110742,baseline,OSTrack baseline has higher AUC
+Walking,motion_blur_medium,motion_blur,medium,42,0.759276,0.787561,+0.028285,1.000000,1.000000,+0.000000,1.691248,1.787445,+0.096197,hpc_rgssb,HPC RG-SSB improves AUC over baseline
+Walking,low_resolution_medium,low_resolution,medium,42,0.788114,0.779751,-0.008363,1.000000,1.000000,+0.000000,1.604082,1.746493,+0.142411,baseline,OSTrack baseline has higher AUC
+Walking,gaussian_noise_medium,gaussian_noise,medium,42,0.793449,0.788523,-0.004926,1.000000,1.000000,+0.000000,1.611455,1.707908,+0.096453,baseline,OSTrack baseline has higher AUC
+Walking2,clean,clean,none,0,0.784772,0.821426,+0.036654,0.924000,1.000000,+0.076000,5.113229,1.667378,-3.445851,hpc_rgssb,HPC RG-SSB improves AUC over baseline
+Walking2,motion_blur_medium,motion_blur,medium,42,0.377287,0.445050,+0.067763,0.550000,0.614000,+0.064000,35.787457,31.939129,-3.848328,hpc_rgssb,HPC RG-SSB improves AUC over baseline
+Walking2,low_resolution_medium,low_resolution,medium,42,0.364673,0.819188,+0.454515,0.398000,1.000000,+0.602000,47.968578,1.876525,-46.092053,hpc_rgssb,HPC RG-SSB improves AUC over baseline
+Walking2,gaussian_noise_medium,gaussian_noise,medium,42,0.477089,0.739881,+0.262792,0.604000,0.938000,+0.334000,31.741293,5.633838,-26.107455,hpc_rgssb,HPC RG-SSB improves AUC over baseline
+FaceOcc1,clean,clean,none,0,0.586478,0.598555,+0.012077,0.547085,0.567265,+0.020180,23.393078,23.751312,+0.358234,hpc_rgssb,HPC RG-SSB improves AUC over baseline
+FaceOcc1,motion_blur_medium,motion_blur,medium,42,0.609943,0.630600,+0.020657,0.634529,0.671525,+0.036996,18.721224,19.050510,+0.329286,hpc_rgssb,HPC RG-SSB improves AUC over baseline
+FaceOcc1,low_resolution_medium,low_resolution,medium,42,0.599476,0.612119,+0.012643,0.614350,0.591928,-0.022422,21.292782,21.719454,+0.426672,hpc_rgssb,HPC RG-SSB improves AUC over baseline
+FaceOcc1,gaussian_noise_medium,gaussian_noise,medium,42,0.649680,0.660092,+0.010412,0.705157,0.746637,+0.041480,17.962036,16.899437,-1.062599,hpc_rgssb,HPC RG-SSB improves AUC over baseline
+Dog1,clean,clean,none,0,0.861188,0.862926,+0.001738,1.000000,1.000000,+0.000000,2.485723,2.420704,-0.065019,hpc_rgssb,HPC RG-SSB improves AUC over baseline
+Dog1,motion_blur_medium,motion_blur,medium,42,0.834389,0.857653,+0.023264,1.000000,1.000000,+0.000000,2.350212,2.076440,-0.273772,hpc_rgssb,HPC RG-SSB improves AUC over baseline
+Dog1,low_resolution_medium,low_resolution,medium,42,0.874939,0.871067,-0.003872,1.000000,1.000000,+0.000000,1.921853,1.949097,+0.027244,baseline,OSTrack baseline has higher AUC
+Dog1,gaussian_noise_medium,gaussian_noise,medium,42,0.860961,0.856414,-0.004547,1.000000,1.000000,+0.000000,2.756150,2.647410,-0.108740,baseline,OSTrack baseline has higher AUC
+Deer,clean,clean,none,0,0.271231,0.424348,+0.153117,0.366197,0.661972,+0.295775,73.172089,41.307079,-31.865010,hpc_rgssb,HPC RG-SSB improves AUC over baseline
+Deer,motion_blur_medium,motion_blur,medium,42,0.208339,0.435504,+0.227165,0.281690,0.647887,+0.366197,103.399780,41.490910,-61.908870,hpc_rgssb,HPC RG-SSB improves AUC over baseline
+Deer,low_resolution_medium,low_resolution,medium,42,0.267187,0.438433,+0.171246,0.338028,0.704225,+0.366197,73.623421,40.147202,-33.476219,hpc_rgssb,HPC RG-SSB improves AUC over baseline
+Deer,gaussian_noise_medium,gaussian_noise,medium,42,0.513457,0.522242,+0.008785,0.746479,0.746479,+0.000000,37.269794,34.893517,-2.376277,hpc_rgssb,HPC RG-SSB improves AUC over baseline
+Football,clean,clean,none,0,0.138997,0.138395,-0.000602,0.165746,0.165746,+0.000000,219.098862,225.620789,+6.521927,baseline,OSTrack baseline has higher AUC
+Football,motion_blur_medium,motion_blur,medium,42,0.324955,0.491685,+0.166730,0.497238,0.740331,+0.243093,58.251381,20.236773,-38.014608,hpc_rgssb,HPC RG-SSB improves AUC over baseline
+Football,low_resolution_medium,low_resolution,medium,42,0.144412,0.143728,-0.000684,0.171271,0.165746,-0.005525,222.232132,229.409225,+7.177093,baseline,OSTrack baseline has higher AUC
+Football,gaussian_noise_medium,gaussian_noise,medium,42,0.265850,0.271730,+0.005880,0.356354,0.364641,+0.008287,117.728493,117.510918,-0.217575,hpc_rgssb,HPC RG-SSB improves AUC over baseline
+BlurBody,clean,clean,none,0,0.835240,0.802632,-0.032608,0.976048,0.973054,-0.002994,6.491373,6.529775,+0.038402,baseline,OSTrack baseline has higher AUC
+BlurBody,motion_blur_medium,motion_blur,medium,42,0.846446,0.817395,-0.029051,0.985030,0.982036,-0.002994,5.823728,6.200110,+0.376382,baseline,OSTrack baseline has higher AUC
+BlurBody,low_resolution_medium,low_resolution,medium,42,0.840932,0.813097,-0.027835,0.982036,0.982036,+0.000000,6.127126,6.212456,+0.085330,baseline,OSTrack baseline has higher AUC
+BlurBody,gaussian_noise_medium,gaussian_noise,medium,42,0.808413,0.786980,-0.021433,0.982036,0.979042,-0.002994,6.575316,6.414169,-0.161147,baseline,OSTrack baseline has higher AUC
+BlurCar2,clean,clean,none,0,0.847863,0.859338,+0.011475,1.000000,1.000000,+0.000000,3.921361,3.819147,-0.102214,hpc_rgssb,HPC RG-SSB improves AUC over baseline
+BlurCar2,motion_blur_medium,motion_blur,medium,42,0.844309,0.850842,+0.006533,1.000000,1.000000,+0.000000,4.385002,4.483412,+0.098410,hpc_rgssb,HPC RG-SSB improves AUC over baseline
+BlurCar2,low_resolution_medium,low_resolution,medium,42,0.852348,0.860743,+0.008395,1.000000,1.000000,+0.000000,3.988775,3.933445,-0.055330,hpc_rgssb,HPC RG-SSB improves AUC over baseline
+BlurCar2,gaussian_noise_medium,gaussian_noise,medium,42,0.856021,0.862909,+0.006888,1.000000,1.000000,+0.000000,3.826772,3.690912,-0.135860,hpc_rgssb,HPC RG-SSB improves AUC over baseline
+BlurFace,clean,clean,none,0,0.820959,0.825317,+0.004358,1.000000,1.000000,+0.000000,6.544191,6.723062,+0.178871,hpc_rgssb,HPC RG-SSB improves AUC over baseline
+BlurFace,motion_blur_medium,motion_blur,medium,42,0.836985,0.835037,-0.001948,1.000000,1.000000,+0.000000,6.679541,6.927478,+0.247937,baseline,OSTrack baseline has higher AUC
+BlurFace,low_resolution_medium,low_resolution,medium,42,0.824413,0.826381,+0.001968,1.000000,1.000000,+0.000000,6.544706,6.740710,+0.196004,hpc_rgssb,HPC RG-SSB improves AUC over baseline
+BlurFace,gaussian_noise_medium,gaussian_noise,medium,42,0.817223,0.817645,+0.000422,1.000000,1.000000,+0.000000,6.524117,6.680791,+0.156674,hpc_rgssb,HPC RG-SSB improves AUC over baseline
+Box,clean,clean,none,0,0.844373,0.841917,-0.002456,0.955211,0.954350,-0.000861,12.109486,12.087549,-0.021937,baseline,OSTrack baseline has higher AUC
+Box,motion_blur_medium,motion_blur,medium,42,0.836629,0.818405,-0.018224,0.962102,0.950904,-0.011198,7.382629,13.738525,+6.355896,baseline,OSTrack baseline has higher AUC
+Box,low_resolution_medium,low_resolution,medium,42,0.857352,0.840313,-0.017039,0.966408,0.957795,-0.008613,7.299999,12.045731,+4.745732,baseline,OSTrack baseline has higher AUC
+Box,gaussian_noise_medium,gaussian_noise,medium,42,0.854649,0.853242,-0.001407,0.973299,0.979328,+0.006029,6.964612,6.891922,-0.072690,baseline,OSTrack baseline has higher AUC
