@@ -1,0 +1,21 @@
+sequence,condition,degradation,severity,seed,baseline_auc,local_lambda_0.02_auc,hpc_lambda_0.02_auc,local_vs_baseline_auc_change,hpc_vs_baseline_auc_change,hpc_vs_local_auc_change,baseline_precision_20,local_precision_20,hpc_precision_20,hpc_precision_20_change_vs_baseline,baseline_mean_center_error,local_mean_center_error,hpc_mean_center_error,hpc_center_error_change_vs_baseline,best_model,note
+Car1,clean,clean,none,0,0.575995,0.583557,0.614240,+0.007562,+0.038245,+0.030683,0.746078,0.746078,0.806863,+0.060785,16.455626,16.424854,13.180775,-3.274851,hpc,HPC beats baseline; HPC beats local lambda 0.02; best=hpc
+Car1,motion_blur_medium,motion_blur,medium,42,0.157212,0.167084,0.193254,+0.009872,+0.036042,+0.026170,0.198039,0.196078,0.259804,+0.061765,82.957024,82.399231,75.900475,-7.056549,hpc,HPC beats baseline; HPC beats local lambda 0.02; best=hpc
+Car1,low_resolution_medium,low_resolution,medium,42,0.214881,0.231528,0.227820,+0.016647,+0.012939,-0.003708,0.267647,0.284314,0.301961,+0.034314,55.176579,53.292439,57.360058,+2.183479,local,HPC beats baseline; HPC below local lambda 0.02; best=local
+Car1,gaussian_noise_medium,gaussian_noise,medium,42,0.207270,0.465211,0.260794,+0.257941,+0.053524,-0.204417,0.250980,0.613725,0.329412,+0.078432,64.898727,25.541130,57.147617,-7.751110,local,HPC beats baseline; HPC below local lambda 0.02; best=local
+David2,clean,clean,none,0,0.794439,0.786880,0.797666,-0.007559,+0.003227,+0.010786,1.000000,1.000000,1.000000,+0.000000,1.541015,1.653213,1.526944,-0.014071,hpc,HPC beats baseline; HPC beats local lambda 0.02; best=hpc
+David2,motion_blur_medium,motion_blur,medium,42,0.549680,0.538931,0.616959,-0.010749,+0.067279,+0.078028,0.970205,0.945996,0.970205,+0.000000,8.078309,8.545233,6.209242,-1.869067,hpc,HPC beats baseline; HPC beats local lambda 0.02; best=hpc
+David2,low_resolution_medium,low_resolution,medium,42,0.806258,0.792485,0.802201,-0.013773,-0.004057,+0.009716,1.000000,1.000000,1.000000,+0.000000,1.516361,1.599949,1.492518,-0.023843,baseline,HPC below baseline; HPC beats local lambda 0.02; best=baseline
+David2,gaussian_noise_medium,gaussian_noise,medium,42,0.817542,0.768110,0.779339,-0.049432,-0.038203,+0.011229,1.000000,0.975791,0.988827,-0.011173,1.885668,3.085201,2.576079,+0.690411,baseline,HPC below baseline; HPC beats local lambda 0.02; best=baseline
+Coke,clean,clean,none,0,0.758259,0.768671,0.762751,+0.010412,+0.004492,-0.005920,0.958763,0.955326,0.958763,+0.000000,5.797408,6.295847,6.259025,+0.461617,local,HPC beats baseline; HPC below local lambda 0.02; best=local
+Coke,motion_blur_medium,motion_blur,medium,42,0.700384,0.727366,0.722126,+0.026982,+0.021742,-0.005240,0.945017,0.934708,0.934708,-0.010309,7.648194,7.894889,7.901353,+0.253159,local,HPC beats baseline; HPC below local lambda 0.02; best=local
+Coke,low_resolution_medium,low_resolution,medium,42,0.745875,0.760777,0.750026,+0.014902,+0.004151,-0.010751,0.945017,0.951890,0.948454,+0.003437,6.493616,6.767758,7.011554,+0.517938,local,HPC beats baseline; HPC below local lambda 0.02; best=local
+Coke,gaussian_noise_medium,gaussian_noise,medium,42,0.746759,0.765711,0.748460,+0.018952,+0.001701,-0.017251,0.951890,0.938144,0.945017,-0.006873,6.327523,6.455208,6.569547,+0.242024,local,HPC beats baseline; HPC below local lambda 0.02; best=local
+,,,,,,,,,,,,,,,,,,,,
+AVERAGES_BY_CONDITION,,,,,,,,,,,,,,,,,,,,
+AVERAGE,clean,,,,0.709564,0.713036,0.724886,+0.003472,+0.015321,+0.011850,,,,+0.020262,,,,-0.942435,,HPC improves over baseline and local on average
+AVERAGE,motion_blur_medium,,,,0.469092,0.477794,0.510780,+0.008702,+0.041688,+0.032986,,,,+0.017152,,,,-2.890819,,HPC improves over baseline and local on average
+AVERAGE,low_resolution_medium,,,,0.589005,0.594930,0.593349,+0.005925,+0.004344,-0.001581,,,,+0.012584,,,,+0.892525,,HPC improves over baseline but trails local on average
+AVERAGE,gaussian_noise_medium,,,,0.590524,0.666344,0.596198,+0.075820,+0.005674,-0.070146,,,,+0.020129,,,,-2.272892,,HPC improves over baseline but trails local on average
+,,,,,,,,,,,,,,,,,,,,
+OVERALL_AVERAGE,all_12_pairs,,,,0.589546,0.613026,0.606303,+0.023480,+0.016757,-0.006723,,,,,,,,,,
