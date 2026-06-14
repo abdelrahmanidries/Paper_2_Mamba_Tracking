@@ -38,6 +38,20 @@ def count_nonempty_lines(path: Path) -> int:
     return sum(1 for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
 
 
+def aligned_annotation_info(raw_lines: int, frame_count: int, init_omit: int) -> tuple[int, int]:
+    available = max(0, raw_lines - init_omit)
+    if frame_count <= 0:
+        return 0, 0
+    if available == frame_count:
+        return available, 1
+    if available > frame_count:
+        stride = max(1, round(available / frame_count))
+        sampled = (available + stride - 1) // stride
+        if sampled >= frame_count:
+            return frame_count, stride
+    return available, 1
+
+
 def inspect_sequence(nfs_root: Path, info: dict) -> dict[str, object]:
     start = int(info["startFrame"]) + int(info.get("initOmit", 0))
     end = int(info["endFrame"])
@@ -48,7 +62,8 @@ def inspect_sequence(nfs_root: Path, info: dict) -> dict[str, object]:
     anno_path = nfs_root / info["anno_path"]
     first_image = seq_dir / f"{start:0{nz}}.{ext}"
     last_image = seq_dir / f"{end:0{nz}}.{ext}"
-    gt_lines = max(0, count_nonempty_lines(anno_path) - int(info.get("initOmit", 0)))
+    raw_gt_lines = count_nonempty_lines(anno_path)
+    aligned_gt_lines, gt_stride = aligned_annotation_info(raw_gt_lines, expected_frames, int(info.get("initOmit", 0)))
     zip_hint = nfs_root / f"{Path(info['path']).name}.zip"
     valid = (
         seq_dir.is_dir()
@@ -56,21 +71,37 @@ def inspect_sequence(nfs_root: Path, info: dict) -> dict[str, object]:
         and first_image.is_file()
         and last_image.is_file()
         and expected_frames > 0
-        and gt_lines == expected_frames
+        and aligned_gt_lines == expected_frames
     )
     return {
         "name": info["name"],
         "object_class": info.get("object_class", ""),
         "frames": expected_frames,
-        "gt_lines": gt_lines,
+        "raw_gt_lines": raw_gt_lines,
+        "aligned_gt_lines": aligned_gt_lines,
+        "gt_stride": gt_stride,
         "valid": valid,
         "zip_present": zip_hint.is_file(),
+        "first_frame": first_image,
+        "annotation": anno_path,
         "path": info["path"],
     }
 
 
 def print_table(rows: list[dict[str, object]]) -> None:
-    columns = ["name", "object_class", "frames", "gt_lines", "valid", "zip_present", "path"]
+    columns = [
+        "name",
+        "object_class",
+        "frames",
+        "raw_gt_lines",
+        "aligned_gt_lines",
+        "gt_stride",
+        "valid",
+        "zip_present",
+        "path",
+        "first_frame",
+        "annotation",
+    ]
     widths = {column: max(len(column), *(len(str(row[column])) for row in rows)) for column in columns}
     print("  ".join(column.ljust(widths[column]) for column in columns))
     print("  ".join("-" * widths[column] for column in columns))

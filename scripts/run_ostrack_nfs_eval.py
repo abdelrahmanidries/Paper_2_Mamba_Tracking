@@ -90,6 +90,38 @@ def count_nonempty_lines(path: Path) -> int:
     return sum(1 for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
 
 
+def frame_count(info: dict) -> int:
+    start = int(info["startFrame"]) + int(info.get("initOmit", 0))
+    end = int(info["endFrame"])
+    return end - start + 1
+
+
+def aligned_annotation_indices(raw_count: int, expected_frames: int, init_omit: int) -> tuple[list[int], int]:
+    available = max(0, raw_count - init_omit)
+    if expected_frames <= 0:
+        return [], 0
+    if available == expected_frames:
+        return list(range(init_omit, init_omit + expected_frames)), 1
+    if available > expected_frames:
+        stride = max(1, round(available / expected_frames))
+        indices = list(range(init_omit, raw_count, stride))[:expected_frames]
+        if len(indices) == expected_frames:
+            return indices, stride
+    return list(range(init_omit, raw_count)), 1
+
+
+def load_aligned_gt(anno_path: Path, info: dict):
+    raw = load_boxes(anno_path)
+    expected_frames = frame_count(info)
+    indices, stride = aligned_annotation_indices(len(raw), expected_frames, int(info.get("initOmit", 0)))
+    if len(indices) != expected_frames:
+        raise ValueError(
+            f"Frame/aligned annotation mismatch for {info['name']}: "
+            f"frames={expected_frames} raw_gt={len(raw)} aligned_gt={len(indices)}"
+        )
+    return raw[indices, :], len(raw), stride
+
+
 def validate_nfs_sequence(root: Path, sequence: str) -> dict:
     info = get_sequence_info(sequence)
     seq_dir = root / info["path"]
@@ -107,9 +139,13 @@ def validate_nfs_sequence(root: Path, sequence: str) -> dict:
     if not first.is_file() or not last.is_file():
         raise FileNotFoundError(f"Missing first/last NFS frame for {sequence}: {first}, {last}")
     frames = end - start + 1
-    gt_lines = count_nonempty_lines(anno_path) - int(info.get("initOmit", 0))
-    if frames != gt_lines:
-        raise ValueError(f"Frame/annotation mismatch for {sequence}: frames={frames} gt={gt_lines}")
+    raw_gt_lines = count_nonempty_lines(anno_path)
+    indices, _ = aligned_annotation_indices(raw_gt_lines, frames, int(info.get("initOmit", 0)))
+    if len(indices) != frames:
+        raise ValueError(
+            f"Frame/aligned annotation mismatch for {sequence}: "
+            f"frames={frames} raw_gt={raw_gt_lines} aligned_gt={len(indices)}"
+        )
     return info
 
 
@@ -293,6 +329,12 @@ def main() -> int:
         print(f"Dataset name: nfs")
         print(f"Sequence path: {info['path']}")
         print(f"Annotation path: {info['anno_path']}")
+        raw_gt_lines = count_nonempty_lines(eval_nfs_root / info["anno_path"])
+        indices, stride = aligned_annotation_indices(raw_gt_lines, frame_count(info), int(info.get("initOmit", 0)))
+        print(f"Frame count: {frame_count(info)}")
+        print(f"Raw annotation lines: {raw_gt_lines}")
+        print(f"Aligned annotation lines: {len(indices)}")
+        print(f"Annotation stride: {stride}")
         print(f"Expected checkpoint: {checkpoint}")
         print(f"Output directory: {run_dir}")
         return 0
@@ -328,11 +370,13 @@ def main() -> int:
         shutil.copy2(result_path, copied_result)
         shutil.copy2(time_path, copied_time)
 
-        gt = load_boxes(eval_nfs_root / info["anno_path"])
-        init_omit = int(info.get("initOmit", 0))
-        if init_omit:
-            gt = gt[init_omit:, :]
+        gt, raw_gt_lines, gt_stride = load_aligned_gt(eval_nfs_root / info["anno_path"], info)
         pred = load_boxes(copied_result)
+        if len(pred) != len(gt):
+            raise ValueError(
+                f"Prediction/aligned GT mismatch for {args.sequence}: "
+                f"pred={len(pred)} aligned_gt={len(gt)} raw_gt={raw_gt_lines} stride={gt_stride}"
+            )
         metrics = compute_metrics(gt, pred)
 
         row = {

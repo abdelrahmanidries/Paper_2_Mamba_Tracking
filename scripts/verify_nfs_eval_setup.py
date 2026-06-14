@@ -60,6 +60,20 @@ def count_nonempty_lines(path: Path) -> int:
     return sum(1 for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
 
 
+def aligned_annotation_info(raw_lines: int, frame_count: int, init_omit: int) -> tuple[int, int]:
+    available = max(0, raw_lines - init_omit)
+    if frame_count <= 0:
+        return 0, 0
+    if available == frame_count:
+        return available, 1
+    if available > frame_count:
+        stride = max(1, round(available / frame_count))
+        sampled = (available + stride - 1) // stride
+        if sampled >= frame_count:
+            return frame_count, stride
+    return available, 1
+
+
 def assert_equal(name: str, actual, expected) -> None:
     if actual != expected:
         raise AssertionError(f"{name} mismatch: {actual!r} != {expected!r}")
@@ -105,15 +119,31 @@ def verify_sequence_files(nfs_root: Path, sequence_names: list[str]) -> list[dic
         anno_path = nfs_root / info["anno_path"]
         first = seq_dir / f"{start:0{nz}}.{ext}"
         last = seq_dir / f"{end:0{nz}}.{ext}"
-        gt_lines = count_nonempty_lines(anno_path) - int(info.get("initOmit", 0))
-        valid = seq_dir.is_dir() and anno_path.is_file() and first.is_file() and last.is_file() and frames == gt_lines
+        raw_gt_lines = count_nonempty_lines(anno_path)
+        aligned_gt_lines, gt_stride = aligned_annotation_info(raw_gt_lines, frames, int(info.get("initOmit", 0)))
+        valid = (
+            seq_dir.is_dir()
+            and anno_path.is_file()
+            and first.is_file()
+            and last.is_file()
+            and frames == aligned_gt_lines
+        )
         if not valid:
             raise AssertionError(
                 f"Invalid NFS sequence {sequence}: seq_dir={seq_dir.is_dir()} "
                 f"anno={anno_path.is_file()} first={first.is_file()} last={last.is_file()} "
-                f"frames={frames} gt={gt_lines}"
+                f"frames={frames} raw_gt={raw_gt_lines} aligned_gt={aligned_gt_lines}"
             )
-        rows.append({"sequence": sequence, "frames": frames, "gt_lines": gt_lines, "path": str(info["path"])})
+        rows.append(
+            {
+                "sequence": sequence,
+                "frames": frames,
+                "raw_gt_lines": raw_gt_lines,
+                "aligned_gt_lines": aligned_gt_lines,
+                "gt_stride": gt_stride,
+                "path": str(info["path"]),
+            }
+        )
     return rows
 
 
@@ -154,7 +184,10 @@ def main() -> int:
     if sequence_rows:
         print("local_nfs_sequence_checks:")
         for row in sequence_rows:
-            print(f"  {row['sequence']}: frames={row['frames']} gt_lines={row['gt_lines']} path={row['path']}")
+            print(
+                f"  {row['sequence']}: frames={row['frames']} raw_gt={row['raw_gt_lines']} "
+                f"aligned_gt={row['aligned_gt_lines']} stride={row['gt_stride']} path={row['path']}"
+            )
     print("verification: NFS evaluation setup passed")
     return 0
 

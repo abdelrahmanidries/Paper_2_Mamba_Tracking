@@ -80,6 +80,20 @@ def count_nonempty_lines(path: Path) -> int:
     return sum(1 for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
 
 
+def aligned_annotation_info(raw_lines: int, frame_count: int, init_omit: int) -> tuple[int, int]:
+    available = max(0, raw_lines - init_omit)
+    if frame_count <= 0:
+        return 0, 0
+    if available == frame_count:
+        return available, 1
+    if available > frame_count:
+        stride = max(1, round(available / frame_count))
+        sampled = (available + stride - 1) // stride
+        if sampled >= frame_count:
+            return frame_count, stride
+    return available, 1
+
+
 def frame_paths(root: Path, info: dict) -> list[Path]:
     start = int(info["startFrame"]) + int(info.get("initOmit", 0))
     end = int(info["endFrame"])
@@ -104,9 +118,13 @@ def validate(args: argparse.Namespace, info: dict) -> None:
     frames = frame_paths(args.clean_nfs_root, info)
     if not frames[0].is_file() or not frames[-1].is_file():
         raise FileNotFoundError(f"Missing first/last frame for {args.sequence}: {frames[0]}, {frames[-1]}")
-    gt_lines = count_nonempty_lines(anno_path) - int(info.get("initOmit", 0))
-    if gt_lines != len(frames):
-        raise ValueError(f"Frame/annotation mismatch for {args.sequence}: frames={len(frames)} gt={gt_lines}")
+    raw_gt_lines = count_nonempty_lines(anno_path)
+    aligned_gt_lines, _ = aligned_annotation_info(raw_gt_lines, len(frames), int(info.get("initOmit", 0)))
+    if aligned_gt_lines != len(frames):
+        raise ValueError(
+            f"Frame/aligned annotation mismatch for {args.sequence}: "
+            f"frames={len(frames)} raw_gt={raw_gt_lines} aligned_gt={aligned_gt_lines}"
+        )
 
 
 def mirror_nfs_root(clean_root: Path, output_root: Path, target_name: str) -> int:
@@ -191,11 +209,18 @@ def main() -> int:
             )
             processed += 1
 
-    anno_lines = count_nonempty_lines(args.clean_nfs_root / info["anno_path"]) - int(info.get("initOmit", 0))
+    raw_anno_lines = count_nonempty_lines(args.clean_nfs_root / info["anno_path"])
+    aligned_anno_lines, gt_stride = aligned_annotation_info(
+        raw_anno_lines,
+        len(frames),
+        int(info.get("initOmit", 0)),
+    )
     print(f"Output root: {output_root}")
     print(f"Mirrored non-target entries: {mirrored}")
     print(f"Processed frames: {processed}")
-    print(f"Annotation lines: {anno_lines}")
+    print(f"Raw annotation lines: {raw_anno_lines}")
+    print(f"Aligned annotation lines: {aligned_anno_lines}")
+    print(f"Annotation stride: {gt_stride}")
     print(f"Degradation type: {args.degradation}")
     print(f"Severity: {args.severity}")
     print(f"Seed: {args.seed}")

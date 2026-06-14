@@ -18,6 +18,14 @@ check before changing architecture or training.
   - `sequences/<sequence_folder>/<frame>.jpg`
   - `anno/nfs_<sequence_folder>.txt`
 - Annotation delimiter: tab
+- NFS raw annotation files can be denser than the sampled image sequence. For
+  example, a 30 FPS image sequence may have a 240 FPS annotation file with about
+  eight times as many rows.
+- The NFS project-side scripts therefore do not compare raw annotation line
+  count directly to frame count. They build the sampled frame list from
+  OSTrack's NFS metadata, then align GT by `initOmit`; if raw annotations are
+  denser than frames by an integer ratio, they take every inferred stride row
+  and truncate to the sampled frame count.
 - OSTrack constructs the full NFS sequence list before selecting one sequence in
   `tracking/test.py`, so degraded roots should preserve a complete NFS-style
   root. The project-side degradation script mirrors non-target sequence folders
