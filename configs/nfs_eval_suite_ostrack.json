@@ -1,0 +1,29 @@
+{
+  "suite_name": "nfs_ostrack_baseline_eval",
+  "clean_nfs_root": "/media/abdel/4484139E5D690B76/nfs",
+  "hpc_clean_nfs_root": "/speed-scratch/a_idrais/nfs",
+  "output_root": "datasets/tiny_sot/degraded",
+  "tracker": "ostrack",
+  "config": "vitb_256_mae_ce_32x4_ep300",
+  "ostrack_root": "external/OSTrack",
+  "results_csv": "experiments/baseline_results.csv",
+  "conda_env": "ostrack",
+  "num_gpus": 1,
+  "threads": 0,
+  "sequences": [
+    "nfs_Gymnastics",
+    "nfs_basketball_player",
+    "nfs_car",
+    "nfs_dog",
+    "nfs_running",
+    "nfs_bottle",
+    "nfs_bird_2",
+    "nfs_walking"
+  ],
+  "runs": [
+    {"degradation": "clean", "severity": "none", "seed": 0},
+    {"degradation": "motion_blur", "severity": "medium", "seed": 42},
+    {"degradation": "low_resolution", "severity": "medium", "seed": 42},
+    {"degradation": "gaussian_noise", "severity": "medium", "seed": 42}
+  ]
+}
