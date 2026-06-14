@@ -438,8 +438,11 @@ def main() -> int:
         logger.write(f"Training skipped: {reason}")
 
     expected_checkpoint = Path(paths["expected_checkpoint"])
-    if not expected_checkpoint.is_file() and args.dry_run and train_requested:
-        logger.write(f"Checkpoint not present yet; dry-run training would create: {expected_checkpoint}")
+    if not expected_checkpoint.is_file() and args.dry_run:
+        if train_requested:
+            logger.write(f"Checkpoint not present yet; dry-run training would create: {expected_checkpoint}")
+        else:
+            logger.write(f"Checkpoint not present; dry-run evaluation would require: {expected_checkpoint}")
     elif not expected_checkpoint.is_file():
         message = f"Expected checkpoint not found: {expected_checkpoint}"
         logger.write(message)
