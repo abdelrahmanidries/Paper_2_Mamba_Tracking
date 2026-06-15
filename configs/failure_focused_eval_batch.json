@@ -1,0 +1,29 @@
+{
+  "batch_name": "failure_focused_uav123_nfs_hpc_rgssb_lam002",
+  "suites": [
+    {
+      "name": "uav123_baseline",
+      "dataset": "uav123",
+      "runner": "scripts/run_uav123_degradation_suite.py",
+      "suite_config": "configs/uav123_eval_suite_failure_expanded_ostrack.json"
+    },
+    {
+      "name": "uav123_hpc_rgssb_featcons_lam002",
+      "dataset": "uav123",
+      "runner": "scripts/run_uav123_degradation_suite.py",
+      "suite_config": "configs/uav123_eval_suite_failure_expanded_hpc_rgssb_featcons_lam002.json"
+    },
+    {
+      "name": "nfs_baseline",
+      "dataset": "nfs",
+      "runner": "scripts/run_nfs_degradation_suite.py",
+      "suite_config": "configs/nfs_eval_suite_failure_expanded_ostrack.json"
+    },
+    {
+      "name": "nfs_hpc_rgssb_featcons_lam002",
+      "dataset": "nfs",
+      "runner": "scripts/run_nfs_degradation_suite.py",
+      "suite_config": "configs/nfs_eval_suite_failure_expanded_hpc_rgssb_featcons_lam002.json"
+    }
+  ]
+}

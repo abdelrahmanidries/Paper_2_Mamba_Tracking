@@ -1,0 +1,37 @@
+{
+  "suite_name": "uav123_failure_expanded_ostrack_baseline_eval",
+  "clean_uav_root": "/speed-scratch/a_idrais/UAV123/UAV123",
+  "local_clean_uav_root": "/media/abdel/windows/UAV123",
+  "output_root": "datasets/tiny_sot/degraded",
+  "tracker": "ostrack",
+  "config": "vitb_256_mae_ce_32x4_ep300",
+  "ostrack_root": "external/OSTrack",
+  "results_csv": "experiments/baseline_results.csv",
+  "conda_env": "ostrack",
+  "num_gpus": 1,
+  "threads": 0,
+  "sequences": [
+    "uav_car10",
+    "uav_person1",
+    "uav_truck1",
+    "uav_bike1",
+    "uav_boat1",
+    "uav_building1",
+    "uav_person3",
+    "uav_car11",
+    "uav_car12",
+    "uav_car13",
+    "uav_person10",
+    "uav_person12_1",
+    "uav_person14_1",
+    "uav_truck2",
+    "uav_bike2",
+    "uav_wakeboard1"
+  ],
+  "runs": [
+    {"degradation": "clean", "severity": "none", "seed": 0},
+    {"degradation": "motion_blur", "severity": "medium", "seed": 42},
+    {"degradation": "low_resolution", "severity": "medium", "seed": 42},
+    {"degradation": "gaussian_noise", "severity": "medium", "seed": 42}
+  ]
+}
