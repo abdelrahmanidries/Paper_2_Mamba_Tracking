@@ -1,0 +1,25 @@
+benchmark,sequence,condition,tracker,config,frames,success_auc,precision_20,mean_iou,mean_center_error,auc_change_vs_baseline,precision_change_vs_baseline,center_error_change_vs_baseline,fps,checkpoint,notes
+OTB,,clean,ostrack,vitb_256_mae_ce_32x4_ep300,,,,,,,,,,baseline placeholder
+OTB,,motion_blur_medium,ostrack,vitb_256_mae_ce_32x4_ep300,,,,,,,,,,baseline placeholder
+OTB,,low_resolution_medium,ostrack,vitb_256_mae_ce_32x4_ep300,,,,,,,,,,baseline placeholder
+OTB,,gaussian_noise_medium,ostrack,vitb_256_mae_ce_32x4_ep300,,,,,,,,,,baseline placeholder
+OTB,,clean,ostrack,vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_hpc_featcons_lam002,,,,,,,,,,current best placeholder
+OTB,,motion_blur_medium,ostrack,vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_hpc_featcons_lam002,,,,,,,,,,current best placeholder
+OTB,,low_resolution_medium,ostrack,vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_hpc_featcons_lam002,,,,,,,,,,current best placeholder
+OTB,,gaussian_noise_medium,ostrack,vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_hpc_featcons_lam002,,,,,,,,,,current best placeholder
+UAV123,,clean,ostrack,vitb_256_mae_ce_32x4_ep300,,,,,,,,,,baseline placeholder
+UAV123,,motion_blur_medium,ostrack,vitb_256_mae_ce_32x4_ep300,,,,,,,,,,baseline placeholder
+UAV123,,low_resolution_medium,ostrack,vitb_256_mae_ce_32x4_ep300,,,,,,,,,,baseline placeholder
+UAV123,,gaussian_noise_medium,ostrack,vitb_256_mae_ce_32x4_ep300,,,,,,,,,,baseline placeholder
+UAV123,,clean,ostrack,vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_hpc_featcons_lam002,,,,,,,,,,current best placeholder
+UAV123,,motion_blur_medium,ostrack,vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_hpc_featcons_lam002,,,,,,,,,,current best placeholder
+UAV123,,low_resolution_medium,ostrack,vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_hpc_featcons_lam002,,,,,,,,,,current best placeholder
+UAV123,,gaussian_noise_medium,ostrack,vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_hpc_featcons_lam002,,,,,,,,,,current best placeholder
+NFS,,clean,ostrack,vitb_256_mae_ce_32x4_ep300,,,,,,,,,,baseline placeholder
+NFS,,motion_blur_medium,ostrack,vitb_256_mae_ce_32x4_ep300,,,,,,,,,,baseline placeholder
+NFS,,low_resolution_medium,ostrack,vitb_256_mae_ce_32x4_ep300,,,,,,,,,,baseline placeholder
+NFS,,gaussian_noise_medium,ostrack,vitb_256_mae_ce_32x4_ep300,,,,,,,,,,baseline placeholder
+NFS,,clean,ostrack,vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_hpc_featcons_lam002,,,,,,,,,,current best placeholder
+NFS,,motion_blur_medium,ostrack,vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_hpc_featcons_lam002,,,,,,,,,,current best placeholder
+NFS,,low_resolution_medium,ostrack,vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_hpc_featcons_lam002,,,,,,,,,,current best placeholder
+NFS,,gaussian_noise_medium,ostrack,vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_hpc_featcons_lam002,,,,,,,,,,current best placeholder
