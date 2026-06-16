@@ -1,0 +1,102 @@
+{
+  "benchmark": "nfs",
+  "baseline_config": "vitb_256_mae_ce_32x4_ep300",
+  "test_config": "vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_hpc_featcons_lam002",
+  "clean_nfs_root": "/speed-scratch/a_idrais/nfs",
+  "degraded_root_base": "/speed-scratch/a_idrais/Paper_2_Mamba_Tracking/datasets/tiny_sot/degraded",
+  "results_csv": "experiments/baseline_results.csv",
+  "comparison_csv": "experiments/rgssb_hpc_nfs_expanded32_comparison.csv",
+  "result_root": "outputs/ostrack_runs",
+  "output_root": "outputs/failure_inspection",
+  "max_visual_frames": 30,
+  "save_visuals": false,
+  "frame_stride_for_visuals": 10,
+  "cases": [
+    {
+      "sequence": "nfs_cheetah",
+      "degradation": "low_resolution",
+      "severity": "medium",
+      "seed": 42,
+      "auc_change": -0.403866,
+      "selection_reason": "top_10_largest_auc_drop; required_known_failure"
+    },
+    {
+      "sequence": "nfs_walking",
+      "degradation": "gaussian_noise",
+      "severity": "medium",
+      "seed": 42,
+      "auc_change": -0.284435,
+      "selection_reason": "top_10_largest_auc_drop; required_known_failure"
+    },
+    {
+      "sequence": "nfs_walking",
+      "degradation": "motion_blur",
+      "severity": "medium",
+      "seed": 42,
+      "auc_change": -0.165552,
+      "selection_reason": "top_10_largest_auc_drop; required_known_failure"
+    },
+    {
+      "sequence": "nfs_car_camaro",
+      "degradation": "low_resolution",
+      "severity": "medium",
+      "seed": 42,
+      "auc_change": -0.080859,
+      "selection_reason": "top_10_largest_auc_drop"
+    },
+    {
+      "sequence": "nfs_car_camaro",
+      "degradation": "motion_blur",
+      "severity": "medium",
+      "seed": 42,
+      "auc_change": -0.078933,
+      "selection_reason": "top_10_largest_auc_drop"
+    },
+    {
+      "sequence": "nfs_biker_acrobat",
+      "degradation": "motion_blur",
+      "severity": "medium",
+      "seed": 42,
+      "auc_change": -0.075263,
+      "selection_reason": "top_10_largest_auc_drop"
+    },
+    {
+      "sequence": "nfs_car_camaro",
+      "degradation": "clean",
+      "severity": "none",
+      "seed": 0,
+      "auc_change": -0.073983,
+      "selection_reason": "top_10_largest_auc_drop"
+    },
+    {
+      "sequence": "nfs_running_100_m",
+      "degradation": "motion_blur",
+      "severity": "medium",
+      "seed": 42,
+      "auc_change": -0.073735,
+      "selection_reason": "top_10_largest_auc_drop"
+    },
+    {
+      "sequence": "nfs_parkour",
+      "degradation": "low_resolution",
+      "severity": "medium",
+      "seed": 42,
+      "auc_change": -0.070502,
+      "selection_reason": "top_10_largest_auc_drop"
+    },
+    {
+      "sequence": "nfs_biker_acrobat",
+      "degradation": "low_resolution",
+      "severity": "medium",
+      "seed": 42,
+      "auc_change": -0.064124,
+      "selection_reason": "top_10_largest_auc_drop"
+    }
+  ],
+  "speed_paths": {
+    "project_root": "/speed-scratch/a_idrais/Paper_2_Mamba_Tracking",
+    "clean_nfs_root": "/speed-scratch/a_idrais/nfs",
+    "degraded_root_base": "/speed-scratch/a_idrais/Paper_2_Mamba_Tracking/datasets/tiny_sot/degraded",
+    "output_root": "/speed-scratch/a_idrais/Paper_2_Mamba_Tracking/outputs/failure_inspection"
+  }
+}
