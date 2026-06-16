@@ -1,0 +1,129 @@
+sequence,condition,degradation,severity,seed,baseline_auc,hpc_rgssb_auc,auc_change,baseline_precision_20,hpc_rgssb_precision_20,precision_20_change,baseline_center_error,hpc_rgssb_center_error,center_error_change,best_model,outcome,note
+nfs_Gymnastics,clean,clean,none,0,0.311558,0.334912,0.023354,0.002717,0.002717,0.000000,219.966156,232.755920,12.789764,hpc_rgssb,gain,RG-SSB improves clearly by AUC
+nfs_Gymnastics,motion_blur_medium,motion_blur,medium,42,0.313038,0.333244,0.020206,0.002717,0.002717,0.000000,216.565979,230.888397,14.322418,hpc_rgssb,gain,RG-SSB improves clearly by AUC
+nfs_Gymnastics,low_resolution_medium,low_resolution,medium,42,0.311558,0.334992,0.023434,0.002717,0.002717,0.000000,219.442444,233.018723,13.576279,hpc_rgssb,gain,RG-SSB improves clearly by AUC
+nfs_Gymnastics,gaussian_noise_medium,gaussian_noise,medium,42,0.299801,0.320652,0.020851,0.002717,0.002717,0.000000,222.369415,232.899323,10.529908,hpc_rgssb,gain,RG-SSB improves clearly by AUC
+nfs_basketball_player,clean,clean,none,0,0.338378,0.338163,-0.000215,0.005420,0.013550,0.008130,198.464813,204.770325,6.305512,baseline,neutral,Near neutral by AUC
+nfs_basketball_player,motion_blur_medium,motion_blur,medium,42,0.331777,0.328289,-0.003488,0.008130,0.008130,0.000000,197.768890,212.031540,14.262650,baseline,neutral,Near neutral by AUC
+nfs_basketball_player,low_resolution_medium,low_resolution,medium,42,0.339424,0.327645,-0.011779,0.005420,0.008130,0.002710,195.825607,213.936234,18.110627,baseline,neutral,Near neutral by AUC
+nfs_basketball_player,gaussian_noise_medium,gaussian_noise,medium,42,0.383482,0.388553,0.005071,0.016260,0.016260,0.000000,192.111053,193.388809,1.277756,hpc_rgssb,neutral,Near neutral by AUC
+nfs_car,clean,clean,none,0,0.091658,0.157460,0.065802,0.000495,0.000495,0.000000,383.523499,270.597534,-112.925965,hpc_rgssb,gain,RG-SSB improves clearly by AUC
+nfs_car,motion_blur_medium,motion_blur,medium,42,0.079914,0.136663,0.056749,0.000495,0.000495,0.000000,388.015961,248.593597,-139.422364,hpc_rgssb,gain,RG-SSB improves clearly by AUC
+nfs_car,low_resolution_medium,low_resolution,medium,42,0.091089,0.146505,0.055416,0.000495,0.000495,0.000000,381.417053,298.065063,-83.351990,hpc_rgssb,gain,RG-SSB improves clearly by AUC
+nfs_car,gaussian_noise_medium,gaussian_noise,medium,42,0.073895,0.125498,0.051603,0.000495,0.000495,0.000000,689.688232,341.962555,-347.725677,hpc_rgssb,gain,RG-SSB improves clearly by AUC
+nfs_dog,clean,clean,none,0,0.419264,0.414563,-0.004701,0.005825,0.006796,0.000971,159.943039,172.733597,12.790558,baseline,neutral,Near neutral by AUC
+nfs_dog,motion_blur_medium,motion_blur,medium,42,0.432145,0.417860,-0.014285,0.008738,0.004854,-0.003884,156.070663,177.837021,21.766358,baseline,neutral,Near neutral by AUC
+nfs_dog,low_resolution_medium,low_resolution,medium,42,0.419168,0.414390,-0.004778,0.008738,0.003883,-0.004855,163.471161,174.622116,11.150955,baseline,neutral,Near neutral by AUC
+nfs_dog,gaussian_noise_medium,gaussian_noise,medium,42,0.429828,0.428280,-0.001548,0.003883,0.003883,0.000000,176.879272,176.780151,-0.099121,baseline,neutral,Near neutral by AUC
+nfs_running,clean,clean,none,0,0.483116,0.480878,-0.002238,0.032496,0.031019,-0.001477,129.966736,151.382156,21.415420,baseline,neutral,Near neutral by AUC
+nfs_running,motion_blur_medium,motion_blur,medium,42,0.484681,0.474253,-0.010428,0.035451,0.032496,-0.002955,130.218918,167.277054,37.058136,baseline,neutral,Near neutral by AUC
+nfs_running,low_resolution_medium,low_resolution,medium,42,0.482589,0.471372,-0.011217,0.033973,0.035451,0.001478,130.824417,160.233078,29.408661,baseline,neutral,Near neutral by AUC
+nfs_running,gaussian_noise_medium,gaussian_noise,medium,42,0.487664,0.512278,0.024614,0.023634,0.016248,-0.007386,118.610733,114.678093,-3.932640,hpc_rgssb,gain,RG-SSB improves clearly by AUC
+nfs_bottle,clean,clean,none,0,0.368912,0.340264,-0.028648,0.023300,0.023300,0.000000,217.255005,245.648010,28.393005,baseline,drop,OSTrack remains clearly better by AUC
+nfs_bottle,motion_blur_medium,motion_blur,medium,42,0.367636,0.337726,-0.029910,0.023300,0.024727,0.001427,219.075607,249.704178,30.628571,baseline,drop,OSTrack remains clearly better by AUC
+nfs_bottle,low_resolution_medium,low_resolution,medium,42,0.368149,0.338526,-0.029623,0.020922,0.023776,0.002854,218.312500,248.432098,30.119598,baseline,drop,OSTrack remains clearly better by AUC
+nfs_bottle,gaussian_noise_medium,gaussian_noise,medium,42,0.390541,0.368973,-0.021568,0.016643,0.018069,0.001426,208.387665,234.473770,26.086105,baseline,drop,OSTrack remains clearly better by AUC
+nfs_bird_2,clean,clean,none,0,0.252434,0.259360,0.006926,0.006303,0.010504,0.004201,272.614838,233.346542,-39.268296,hpc_rgssb,neutral,Near neutral by AUC
+nfs_bird_2,motion_blur_medium,motion_blur,medium,42,0.253682,0.272964,0.019282,0.010504,0.010504,0.000000,267.806854,244.585724,-23.221130,hpc_rgssb,neutral,Near neutral by AUC
+nfs_bird_2,low_resolution_medium,low_resolution,medium,42,0.250957,0.272007,0.021050,0.006303,0.012605,0.006302,269.925629,235.609833,-34.315796,hpc_rgssb,gain,RG-SSB improves clearly by AUC
+nfs_bird_2,gaussian_noise_medium,gaussian_noise,medium,42,0.276521,0.260275,-0.016246,0.012605,0.010504,-0.002101,223.684799,215.257858,-8.426941,baseline,neutral,Near neutral by AUC
+nfs_walking,clean,clean,none,0,0.222442,0.367193,0.144751,0.030631,0.041441,0.010810,223.869156,169.591141,-54.278015,hpc_rgssb,gain,RG-SSB improves clearly by AUC
+nfs_walking,motion_blur_medium,motion_blur,medium,42,0.404799,0.239247,-0.165552,0.037838,0.023423,-0.014415,151.543518,199.849487,48.305969,baseline,drop,OSTrack remains clearly better by AUC
+nfs_walking,low_resolution_medium,low_resolution,medium,42,0.222977,0.239408,0.016431,0.023423,0.028829,0.005406,223.581696,200.176178,-23.405518,hpc_rgssb,neutral,Near neutral by AUC
+nfs_walking,gaussian_noise_medium,gaussian_noise,medium,42,0.584444,0.300009,-0.284435,0.086486,0.021622,-0.064864,91.790886,184.636658,92.845772,baseline,drop,OSTrack remains clearly better by AUC
+nfs_basketball_player_2,clean,clean,none,0,0.395043,0.396991,0.001948,0.011442,0.016018,0.004576,203.575226,203.618561,0.043335,hpc_rgssb,neutral,Near neutral by AUC
+nfs_basketball_player_2,motion_blur_medium,motion_blur,medium,42,0.394726,0.383941,-0.010785,0.009153,0.004577,-0.004576,209.862885,212.910858,3.047973,baseline,neutral,Near neutral by AUC
+nfs_basketball_player_2,low_resolution_medium,low_resolution,medium,42,0.398056,0.397558,-0.000498,0.004577,0.011442,0.006865,204.215103,205.180405,0.965302,baseline,neutral,Near neutral by AUC
+nfs_basketball_player_2,gaussian_noise_medium,gaussian_noise,medium,42,0.342207,0.385414,0.043207,0.002288,0.006865,0.004577,189.831253,184.848236,-4.983017,hpc_rgssb,gain,RG-SSB improves clearly by AUC
+nfs_car_drifting,clean,clean,none,0,0.157157,0.114348,-0.042809,0.011561,0.011561,0.000000,330.028992,391.876099,61.847107,baseline,drop,OSTrack remains clearly better by AUC
+nfs_car_drifting,motion_blur_medium,motion_blur,medium,42,0.161048,0.110742,-0.050306,0.011561,0.011561,0.000000,323.918701,392.347137,68.428436,baseline,drop,OSTrack remains clearly better by AUC
+nfs_car_drifting,low_resolution_medium,low_resolution,medium,42,0.151262,0.111944,-0.039318,0.011561,0.011561,0.000000,341.454468,387.546906,46.092438,baseline,drop,OSTrack remains clearly better by AUC
+nfs_car_drifting,gaussian_noise_medium,gaussian_noise,medium,42,0.180106,0.153208,-0.026898,0.011561,0.011561,0.000000,319.787842,361.061829,41.273987,baseline,drop,OSTrack remains clearly better by AUC
+nfs_car_jumping,clean,clean,none,0,0.125563,0.184068,0.058505,0.045455,0.045455,0.000000,294.559204,248.707916,-45.851288,hpc_rgssb,gain,RG-SSB improves clearly by AUC
+nfs_car_jumping,motion_blur_medium,motion_blur,medium,42,0.117912,0.120612,0.002700,0.045455,0.045455,0.000000,300.619263,295.997528,-4.621735,hpc_rgssb,neutral,Near neutral by AUC
+nfs_car_jumping,low_resolution_medium,low_resolution,medium,42,0.125113,0.125113,0.000000,0.045455,0.045455,0.000000,291.497284,284.408630,-7.088654,tie,neutral,Near neutral by AUC
+nfs_car_jumping,gaussian_noise_medium,gaussian_noise,medium,42,0.132313,0.069307,-0.063006,0.045455,0.045455,0.000000,280.478607,700.266479,419.787872,baseline,drop,OSTrack remains clearly better by AUC
+nfs_cheetah,clean,clean,none,0,0.697634,0.684058,-0.013576,0.011976,0.011976,0.000000,84.933655,83.502937,-1.430718,baseline,neutral,Near neutral by AUC
+nfs_cheetah,motion_blur_medium,motion_blur,medium,42,0.707773,0.676172,-0.031601,0.005988,0.011976,0.005988,93.865623,89.306091,-4.559532,baseline,drop,OSTrack remains clearly better by AUC
+nfs_cheetah,low_resolution_medium,low_resolution,medium,42,0.701785,0.297919,-0.403866,0.017964,0.005988,-0.011976,90.701317,225.233627,134.532310,baseline,drop,OSTrack remains clearly better by AUC
+nfs_cheetah,gaussian_noise_medium,gaussian_noise,medium,42,0.655896,0.646054,-0.009842,0.005988,0.011976,0.005988,114.862274,116.882225,2.019951,baseline,neutral,Near neutral by AUC
+nfs_horse_running,clean,clean,none,0,0.150723,0.153786,0.003063,0.007194,0.007194,0.000000,215.121735,216.324051,1.202316,hpc_rgssb,neutral,Near neutral by AUC
+nfs_horse_running,motion_blur_medium,motion_blur,medium,42,0.150581,0.154854,0.004273,0.007194,0.007194,0.000000,213.865295,215.142487,1.277192,hpc_rgssb,neutral,Near neutral by AUC
+nfs_horse_running,low_resolution_medium,low_resolution,medium,42,0.145594,0.154427,0.008833,0.007194,0.007194,0.000000,217.436096,215.250626,-2.185470,hpc_rgssb,neutral,Near neutral by AUC
+nfs_horse_running,gaussian_noise_medium,gaussian_noise,medium,42,0.318470,0.321105,0.002635,0.014388,0.007194,-0.007194,142.423004,155.249374,12.826370,hpc_rgssb,neutral,Near neutral by AUC
+nfs_motorcross,clean,clean,none,0,0.325717,0.301346,-0.024371,0.051282,0.051282,0.000000,199.006577,197.242462,-1.764115,baseline,drop,OSTrack remains clearly better by AUC
+nfs_motorcross,motion_blur_medium,motion_blur,medium,42,0.325463,0.279259,-0.046204,0.051282,0.051282,0.000000,202.248077,207.814774,5.566697,baseline,drop,OSTrack remains clearly better by AUC
+nfs_motorcross,low_resolution_medium,low_resolution,medium,42,0.337395,0.285352,-0.052043,0.051282,0.051282,0.000000,191.738144,198.992538,7.254394,baseline,drop,OSTrack remains clearly better by AUC
+nfs_motorcross,gaussian_noise_medium,gaussian_noise,medium,42,0.312008,0.293729,-0.018279,0.051282,0.051282,0.000000,205.039337,214.491669,9.452332,baseline,neutral,Near neutral by AUC
+nfs_person_scooter,clean,clean,none,0,0.363484,0.316808,-0.046676,0.002421,0.007264,0.004843,178.560715,195.516953,16.956238,baseline,drop,OSTrack remains clearly better by AUC
+nfs_person_scooter,motion_blur_medium,motion_blur,medium,42,0.366504,0.313427,-0.053077,0.004843,0.012107,0.007264,179.195938,221.563370,42.367432,baseline,drop,OSTrack remains clearly better by AUC
+nfs_person_scooter,low_resolution_medium,low_resolution,medium,42,0.375015,0.335243,-0.039772,0.004843,0.004843,0.000000,175.754608,185.735474,9.980866,baseline,drop,OSTrack remains clearly better by AUC
+nfs_person_scooter,gaussian_noise_medium,gaussian_noise,medium,42,0.356747,0.318342,-0.038405,0.021792,0.002421,-0.019371,171.702026,170.551758,-1.150268,baseline,drop,OSTrack remains clearly better by AUC
+nfs_soccer_player_2,clean,clean,none,0,0.314893,0.330693,0.015800,0.010526,0.014737,0.004211,318.439545,287.554565,-30.884980,hpc_rgssb,neutral,Near neutral by AUC
+nfs_soccer_player_2,motion_blur_medium,motion_blur,medium,42,0.309349,0.313434,0.004085,0.012632,0.014737,0.002105,315.911041,293.118011,-22.793030,hpc_rgssb,neutral,Near neutral by AUC
+nfs_soccer_player_2,low_resolution_medium,low_resolution,medium,42,0.313330,0.329151,0.015821,0.010526,0.018947,0.008421,316.677521,283.736206,-32.941315,hpc_rgssb,neutral,Near neutral by AUC
+nfs_soccer_player_2,gaussian_noise_medium,gaussian_noise,medium,42,0.355414,0.382533,0.027119,0.006316,0.008421,0.002105,255.339508,254.497223,-0.842285,hpc_rgssb,gain,RG-SSB improves clearly by AUC
+nfs_basketball_1,clean,clean,none,0,0.134225,0.140615,0.006390,0.024823,0.014184,-0.010639,383.880035,373.575745,-10.304290,hpc_rgssb,neutral,Near neutral by AUC
+nfs_basketball_1,motion_blur_medium,motion_blur,medium,42,0.144267,0.136016,-0.008251,0.024823,0.021277,-0.003546,375.694519,379.527222,3.832703,baseline,neutral,Near neutral by AUC
+nfs_basketball_1,low_resolution_medium,low_resolution,medium,42,0.133382,0.137174,0.003792,0.024823,0.017730,-0.007093,390.475525,383.777252,-6.698273,hpc_rgssb,neutral,Near neutral by AUC
+nfs_basketball_1,gaussian_noise_medium,gaussian_noise,medium,42,0.122428,0.123692,0.001264,0.007092,0.007092,0.000000,342.708527,356.751221,14.042694,hpc_rgssb,neutral,Near neutral by AUC
+nfs_biker_acrobat,clean,clean,none,0,0.347153,0.320390,-0.026763,0.023438,0.007812,-0.015626,235.462311,219.773270,-15.689041,baseline,drop,OSTrack remains clearly better by AUC
+nfs_biker_acrobat,motion_blur_medium,motion_blur,medium,42,0.336324,0.261061,-0.075263,0.015625,0.007812,-0.007813,217.820145,229.106323,11.286178,baseline,drop,OSTrack remains clearly better by AUC
+nfs_biker_acrobat,low_resolution_medium,low_resolution,medium,42,0.348855,0.284731,-0.064124,0.023438,0.007812,-0.015626,228.884247,230.334137,1.449890,baseline,drop,OSTrack remains clearly better by AUC
+nfs_biker_acrobat,gaussian_noise_medium,gaussian_noise,medium,42,0.367342,0.358988,-0.008354,0.007812,0.007812,0.000000,244.837463,231.964081,-12.873382,baseline,neutral,Near neutral by AUC
+nfs_biker_all_1,clean,clean,none,0,0.149566,0.127661,-0.021905,0.017699,0.017699,0.000000,207.247513,262.465515,55.218002,baseline,drop,OSTrack remains clearly better by AUC
+nfs_biker_all_1,motion_blur_medium,motion_blur,medium,42,0.124507,0.121879,-0.002628,0.017699,0.017699,0.000000,253.901337,287.473572,33.572235,baseline,neutral,Near neutral by AUC
+nfs_biker_all_1,low_resolution_medium,low_resolution,medium,42,0.125559,0.125559,0.000000,0.017699,0.017699,0.000000,254.850357,272.099548,17.249191,tie,neutral,Near neutral by AUC
+nfs_biker_all_1,gaussian_noise_medium,gaussian_noise,medium,42,0.128800,0.117848,-0.010952,0.017699,0.017699,0.000000,277.518829,328.218262,50.699433,baseline,neutral,Near neutral by AUC
+nfs_biker_whole_body,clean,clean,none,0,0.182718,0.165963,-0.016755,0.003497,0.003497,0.000000,292.654297,292.766510,0.112213,baseline,neutral,Near neutral by AUC
+nfs_biker_whole_body,motion_blur_medium,motion_blur,medium,42,0.189625,0.182182,-0.007443,0.003497,0.003497,0.000000,290.268097,289.075165,-1.192932,baseline,neutral,Near neutral by AUC
+nfs_biker_whole_body,low_resolution_medium,low_resolution,medium,42,0.185799,0.168334,-0.017465,0.003497,0.003497,0.000000,291.154999,292.379547,1.224548,baseline,neutral,Near neutral by AUC
+nfs_biker_whole_body,gaussian_noise_medium,gaussian_noise,medium,42,0.203905,0.200703,-0.003202,0.001748,0.001748,0.000000,293.699310,292.787262,-0.912048,baseline,neutral,Near neutral by AUC
+nfs_bowling_1,clean,clean,none,0,0.186877,0.181551,-0.005326,0.122112,0.052805,-0.069307,155.230743,169.797928,14.567185,baseline,neutral,Near neutral by AUC
+nfs_bowling_1,motion_blur_medium,motion_blur,medium,42,0.176355,0.174754,-0.001601,0.072607,0.033003,-0.039604,182.545029,195.400848,12.855819,baseline,neutral,Near neutral by AUC
+nfs_bowling_1,low_resolution_medium,low_resolution,medium,42,0.186648,0.180930,-0.005718,0.099010,0.036304,-0.062706,160.515579,174.976944,14.461365,baseline,neutral,Near neutral by AUC
+nfs_bowling_1,gaussian_noise_medium,gaussian_noise,medium,42,0.174917,0.171094,-0.003823,0.231023,0.066007,-0.165016,112.142120,153.714722,41.572602,baseline,neutral,Near neutral by AUC
+nfs_car_camaro,clean,clean,none,0,0.446920,0.372937,-0.073983,0.027778,0.055556,0.027778,293.521057,387.684875,94.163818,baseline,drop,OSTrack remains clearly better by AUC
+nfs_car_camaro,motion_blur_medium,motion_blur,medium,42,0.432068,0.353135,-0.078933,0.083333,0.055556,-0.027777,303.796600,398.849243,95.052643,baseline,drop,OSTrack remains clearly better by AUC
+nfs_car_camaro,low_resolution_medium,low_resolution,medium,42,0.455171,0.374312,-0.080859,0.027778,0.055556,0.027778,289.946442,388.717651,98.771209,baseline,drop,OSTrack remains clearly better by AUC
+nfs_car_camaro,gaussian_noise_medium,gaussian_noise,medium,42,0.366612,0.312431,-0.054181,0.055556,0.055556,0.000000,440.705902,466.824280,26.118378,baseline,drop,OSTrack remains clearly better by AUC
+nfs_car_rc_rolling,clean,clean,none,0,0.085755,0.078889,-0.006866,0.016129,0.016129,0.000000,661.090454,643.271729,-17.818725,baseline,neutral,Near neutral by AUC
+nfs_car_rc_rolling,motion_blur_medium,motion_blur,medium,42,0.085117,0.068668,-0.016449,0.016129,0.016129,0.000000,672.686646,512.234558,-160.452088,baseline,neutral,Near neutral by AUC
+nfs_car_rc_rolling,low_resolution_medium,low_resolution,medium,42,0.084158,0.086873,0.002715,0.016129,0.016129,0.000000,677.311829,625.457642,-51.854187,hpc_rgssb,neutral,Near neutral by AUC
+nfs_car_rc_rolling,gaussian_noise_medium,gaussian_noise,medium,42,0.085915,0.061961,-0.023954,0.016129,0.016129,0.000000,671.022400,629.902588,-41.119812,baseline,drop,OSTrack remains clearly better by AUC
+nfs_car_side,clean,clean,none,0,0.177484,0.185185,0.007701,0.009259,0.018519,0.009260,574.024902,548.172180,-25.852722,hpc_rgssb,neutral,Near neutral by AUC
+nfs_car_side,motion_blur_medium,motion_blur,medium,42,0.182985,0.181335,-0.001650,0.009259,0.009259,0.000000,561.128784,556.372986,-4.755798,baseline,neutral,Near neutral by AUC
+nfs_car_side,low_resolution_medium,low_resolution,medium,42,0.182618,0.188119,0.005501,0.009259,0.009259,0.000000,561.851440,539.217651,-22.633789,hpc_rgssb,neutral,Near neutral by AUC
+nfs_car_side,gaussian_noise_medium,gaussian_noise,medium,42,0.175101,0.221672,0.046571,0.009259,0.009259,0.000000,548.672302,486.409760,-62.262542,hpc_rgssb,gain,RG-SSB improves clearly by AUC
+nfs_dog_1,clean,clean,none,0,0.349717,0.389675,0.039958,0.005952,0.011905,0.005953,281.015686,247.049622,-33.966064,hpc_rgssb,gain,RG-SSB improves clearly by AUC
+nfs_dog_1,motion_blur_medium,motion_blur,medium,42,0.364745,0.385608,0.020863,0.011905,0.017857,0.005952,275.137054,249.092987,-26.044067,hpc_rgssb,gain,RG-SSB improves clearly by AUC
+nfs_dog_1,low_resolution_medium,low_resolution,medium,42,0.349540,0.385608,0.036068,0.005952,0.011905,0.005953,278.621521,250.795059,-27.826462,hpc_rgssb,gain,RG-SSB improves clearly by AUC
+nfs_dog_1,gaussian_noise_medium,gaussian_noise,medium,42,0.335514,0.347006,0.011492,0.005952,0.017857,0.011905,265.391083,265.605225,0.214142,hpc_rgssb,neutral,Near neutral by AUC
+nfs_drone,clean,clean,none,0,0.246959,0.314710,0.067751,0.028571,0.028571,0.000000,262.867706,299.655334,36.787628,hpc_rgssb,gain,RG-SSB improves clearly by AUC
+nfs_drone,motion_blur_medium,motion_blur,medium,42,0.248939,0.335502,0.086563,0.042857,0.014286,-0.028571,254.556107,292.108704,37.552597,hpc_rgssb,gain,RG-SSB improves clearly by AUC
+nfs_drone,low_resolution_medium,low_resolution,medium,42,0.239887,0.310891,0.071004,0.028571,0.014286,-0.014285,264.676392,310.616028,45.939636,hpc_rgssb,gain,RG-SSB improves clearly by AUC
+nfs_drone,gaussian_noise_medium,gaussian_noise,medium,42,0.246110,0.274399,0.028289,0.028571,0.028571,0.000000,304.069458,329.276459,25.207001,hpc_rgssb,gain,RG-SSB improves clearly by AUC
+nfs_footbal_skill,clean,clean,none,0,0.093115,0.091301,-0.001814,0.007634,0.007634,0.000000,382.954132,380.921570,-2.032562,baseline,neutral,Near neutral by AUC
+nfs_footbal_skill,motion_blur_medium,motion_blur,medium,42,0.089184,0.087446,-0.001738,0.015267,0.015267,0.000000,384.187134,380.204681,-3.982453,baseline,neutral,Near neutral by AUC
+nfs_footbal_skill,low_resolution_medium,low_resolution,medium,42,0.092737,0.092434,-0.000303,0.007634,0.007634,0.000000,383.629425,381.195801,-2.433624,baseline,neutral,Near neutral by AUC
+nfs_footbal_skill,gaussian_noise_medium,gaussian_noise,medium,42,0.090998,0.090998,0.000000,0.007634,0.007634,0.000000,381.469696,378.402863,-3.066833,tie,neutral,Near neutral by AUC
+nfs_helicopter,clean,clean,none,0,0.069211,0.100383,0.031172,0.003226,0.003226,0.000000,613.360413,565.358521,-48.001892,hpc_rgssb,gain,RG-SSB improves clearly by AUC
+nfs_helicopter,motion_blur_medium,motion_blur,medium,42,0.067486,0.087225,0.019739,0.016129,0.006452,-0.009677,614.440552,578.943726,-35.496826,hpc_rgssb,neutral,Near neutral by AUC
+nfs_helicopter,low_resolution_medium,low_resolution,medium,42,0.057011,0.090802,0.033791,0.006452,0.006452,0.000000,619.572510,577.129272,-42.443238,hpc_rgssb,gain,RG-SSB improves clearly by AUC
+nfs_helicopter,gaussian_noise_medium,gaussian_noise,medium,42,0.068061,0.062887,-0.005174,0.009677,0.009677,0.000000,597.392944,595.546692,-1.846252,baseline,neutral,Near neutral by AUC
+nfs_parkour,clean,clean,none,0,0.289177,0.235063,-0.054114,0.017241,0.017241,0.000000,204.413773,252.342987,47.929214,baseline,drop,OSTrack remains clearly better by AUC
+nfs_parkour,motion_blur_medium,motion_blur,medium,42,0.099351,0.198020,0.098669,0.017241,0.017241,0.000000,477.499420,305.127655,-172.371765,hpc_rgssb,gain,RG-SSB improves clearly by AUC
+nfs_parkour,low_resolution_medium,low_resolution,medium,42,0.236258,0.165756,-0.070502,0.017241,0.017241,0.000000,283.360443,468.992157,185.631714,baseline,drop,OSTrack remains clearly better by AUC
+nfs_parkour,gaussian_noise_medium,gaussian_noise,medium,42,0.043018,0.051383,0.008365,0.017241,0.017241,0.000000,349.428741,695.746277,346.317536,hpc_rgssb,neutral,Near neutral by AUC
+nfs_running_100_m,clean,clean,none,0,0.286275,0.265239,-0.021036,0.006390,0.003195,-0.003195,435.047363,481.282257,46.234894,baseline,drop,OSTrack remains clearly better by AUC
+nfs_running_100_m,motion_blur_medium,motion_blur,medium,42,0.266251,0.192516,-0.073735,0.009585,0.006390,-0.003195,478.817383,560.079285,81.261902,baseline,drop,OSTrack remains clearly better by AUC
+nfs_running_100_m,low_resolution_medium,low_resolution,medium,42,0.270332,0.226078,-0.044254,0.003195,0.003195,0.000000,427.809601,520.402344,92.592743,baseline,drop,OSTrack remains clearly better by AUC
+nfs_running_100_m,gaussian_noise_medium,gaussian_noise,medium,42,0.266916,0.274381,0.007465,0.031949,0.063898,0.031949,416.534302,409.136597,-7.397705,hpc_rgssb,neutral,Near neutral by AUC
+nfs_soccer_ball_2,clean,clean,none,0,0.295084,0.266559,-0.028525,0.018097,0.029473,0.011376,186.527603,183.619278,-2.908325,baseline,drop,OSTrack remains clearly better by AUC
+nfs_soccer_ball_2,motion_blur_medium,motion_blur,medium,42,0.280642,0.253735,-0.026907,0.033092,0.042399,0.009307,191.715134,186.199387,-5.515747,baseline,drop,OSTrack remains clearly better by AUC
+nfs_soccer_ball_2,low_resolution_medium,low_resolution,medium,42,0.288368,0.261035,-0.027333,0.024819,0.037229,0.012410,188.444092,183.510056,-4.934036,baseline,drop,OSTrack remains clearly better by AUC
+nfs_soccer_ball_2,gaussian_noise_medium,gaussian_noise,medium,42,0.241648,0.235371,-0.006277,0.022234,0.010858,-0.011376,203.629379,207.922821,4.293442,baseline,neutral,Near neutral by AUC
+nfs_tiger,clean,clean,none,0,0.376454,0.353941,-0.022513,0.116324,0.115039,-0.001285,384.777924,408.691071,23.913147,baseline,drop,OSTrack remains clearly better by AUC
+nfs_tiger,motion_blur_medium,motion_blur,medium,42,0.408161,0.370918,-0.037243,0.106684,0.089332,-0.017352,369.428345,398.356934,28.928589,baseline,drop,OSTrack remains clearly better by AUC
+nfs_tiger,low_resolution_medium,low_resolution,medium,42,0.377930,0.357186,-0.020744,0.116967,0.112468,-0.004499,384.670319,406.294739,21.624420,baseline,drop,OSTrack remains clearly better by AUC
+nfs_tiger,gaussian_noise_medium,gaussian_noise,medium,42,0.329246,0.322247,-0.006999,0.111183,0.110540,-0.000643,413.735687,429.261810,15.526123,baseline,neutral,Near neutral by AUC
