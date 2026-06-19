@@ -19,6 +19,7 @@ if str(ROOT) not in sys.path:
 
 from src.degradations.pipeline import apply_degradation
 from src.degradations.protocols import DEGRADATION_TYPES, SEVERITIES
+from src.evaluation.nfs_annotations import dump_manifest, load_canonical_nfs_ground_truth, manifest_record, write_xywh_annotations
 
 
 NFS_DATASET_PY = ROOT / "external" / "OSTrack" / "lib" / "test" / "evaluation" / "nfsdataset.py"
@@ -118,20 +119,16 @@ def validate(args: argparse.Namespace, info: dict) -> None:
     frames = frame_paths(args.clean_nfs_root, info)
     if not frames[0].is_file() or not frames[-1].is_file():
         raise FileNotFoundError(f"Missing first/last frame for {args.sequence}: {frames[0]}, {frames[-1]}")
-    raw_gt_lines = count_nonempty_lines(anno_path)
-    aligned_gt_lines, _ = aligned_annotation_info(raw_gt_lines, len(frames), int(info.get("initOmit", 0)))
-    if aligned_gt_lines != len(frames):
-        raise ValueError(
-            f"Frame/aligned annotation mismatch for {args.sequence}: "
-            f"frames={len(frames)} raw_gt={raw_gt_lines} aligned_gt={aligned_gt_lines}"
-        )
+    bundle = load_canonical_nfs_ground_truth(args.clean_nfs_root, args.sequence)
+    if bundle.aligned_annotation_count != len(frames):
+        raise ValueError(f"Frame/aligned annotation mismatch for {args.sequence}: frames={len(frames)} aligned_gt={bundle.aligned_annotation_count}")
 
 
 def mirror_nfs_root(clean_root: Path, output_root: Path, target_name: str) -> int:
     output_root.mkdir(parents=True, exist_ok=True)
     mirrored = 0
     for entry in sorted(clean_root.iterdir()):
-        if entry.name == "sequences":
+        if entry.name in {"sequences", "anno"}:
             continue
         link_or_copy(entry, output_root / entry.name, directory=entry.is_dir())
         mirrored += 1
@@ -154,6 +151,10 @@ def main() -> int:
     target_name = Path(info["path"]).name
     output_root = args.output_root / f"nfs_{args.sequence}_{args.degradation}_{args.severity}"
     mirrored = mirror_nfs_root(args.clean_nfs_root, output_root, target_name)
+    bundle = load_canonical_nfs_ground_truth(args.clean_nfs_root, args.sequence)
+    output_anno = output_root / info["anno_path"]
+    write_xywh_annotations(output_anno, bundle.gt_xywh)
+    dump_manifest(output_root / "normalization_manifest.json", [manifest_record(bundle, output_anno)])
 
     clean_target_dir = args.clean_nfs_root / info["path"]
     output_target_dir = output_root / info["path"]
@@ -209,18 +210,16 @@ def main() -> int:
             )
             processed += 1
 
-    raw_anno_lines = count_nonempty_lines(args.clean_nfs_root / info["anno_path"])
-    aligned_anno_lines, gt_stride = aligned_annotation_info(
-        raw_anno_lines,
-        len(frames),
-        int(info.get("initOmit", 0)),
-    )
+    raw_anno_lines = bundle.raw_annotation_count
+    aligned_anno_lines = bundle.aligned_annotation_count
+    gt_stride = bundle.sampling_stride
     print(f"Output root: {output_root}")
     print(f"Mirrored non-target entries: {mirrored}")
     print(f"Processed frames: {processed}")
     print(f"Raw annotation lines: {raw_anno_lines}")
     print(f"Aligned annotation lines: {aligned_anno_lines}")
     print(f"Annotation stride: {gt_stride}")
+    print(f"Coordinate format: {bundle.coordinate_format}")
     print(f"Degradation type: {args.degradation}")
     print(f"Severity: {args.severity}")
     print(f"Seed: {args.seed}")

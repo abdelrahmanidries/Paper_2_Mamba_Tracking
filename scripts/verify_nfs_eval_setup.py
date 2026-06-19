@@ -9,9 +9,15 @@ import py_compile
 from pathlib import Path
 
 import yaml
+import sys
 
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from src.evaluation.nfs_annotations import load_canonical_nfs_ground_truth
+
 NFS_DATASET_PY = ROOT / "external" / "OSTrack" / "lib" / "test" / "evaluation" / "nfsdataset.py"
 SCRIPTS = [
     ROOT / "scripts" / "inspect_nfs_sequences.py",
@@ -119,8 +125,10 @@ def verify_sequence_files(nfs_root: Path, sequence_names: list[str]) -> list[dic
         anno_path = nfs_root / info["anno_path"]
         first = seq_dir / f"{start:0{nz}}.{ext}"
         last = seq_dir / f"{end:0{nz}}.{ext}"
-        raw_gt_lines = count_nonempty_lines(anno_path)
-        aligned_gt_lines, gt_stride = aligned_annotation_info(raw_gt_lines, frames, int(info.get("initOmit", 0)))
+        bundle = load_canonical_nfs_ground_truth(nfs_root, sequence)
+        raw_gt_lines = bundle.raw_annotation_count
+        aligned_gt_lines = bundle.aligned_annotation_count
+        gt_stride = bundle.sampling_stride
         valid = (
             seq_dir.is_dir()
             and anno_path.is_file()
@@ -141,6 +149,7 @@ def verify_sequence_files(nfs_root: Path, sequence_names: list[str]) -> list[dic
                 "raw_gt_lines": raw_gt_lines,
                 "aligned_gt_lines": aligned_gt_lines,
                 "gt_stride": gt_stride,
+                "coordinate_format": bundle.coordinate_format,
                 "path": str(info["path"]),
             }
         )
@@ -186,7 +195,8 @@ def main() -> int:
         for row in sequence_rows:
             print(
                 f"  {row['sequence']}: frames={row['frames']} raw_gt={row['raw_gt_lines']} "
-                f"aligned_gt={row['aligned_gt_lines']} stride={row['gt_stride']} path={row['path']}"
+                f"aligned_gt={row['aligned_gt_lines']} stride={row['gt_stride']} "
+                f"format={row['coordinate_format']} path={row['path']}"
             )
     print("verification: NFS evaluation setup passed")
     return 0

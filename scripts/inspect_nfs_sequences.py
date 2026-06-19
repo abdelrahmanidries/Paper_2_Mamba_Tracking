@@ -6,9 +6,15 @@ from __future__ import annotations
 import argparse
 import ast
 from pathlib import Path
-
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from src.evaluation.nfs_annotations import load_canonical_nfs_ground_truth
+
+
 NFS_DATASET_PY = ROOT / "external" / "OSTrack" / "lib" / "test" / "evaluation" / "nfsdataset.py"
 
 
@@ -64,6 +70,16 @@ def inspect_sequence(nfs_root: Path, info: dict) -> dict[str, object]:
     last_image = seq_dir / f"{end:0{nz}}.{ext}"
     raw_gt_lines = count_nonempty_lines(anno_path)
     aligned_gt_lines, gt_stride = aligned_annotation_info(raw_gt_lines, expected_frames, int(info.get("initOmit", 0)))
+    coordinate_format = "unknown"
+    if nfs_root.is_dir() and (nfs_root / "sequences").is_dir() and (nfs_root / "anno").is_dir():
+        try:
+            bundle = load_canonical_nfs_ground_truth(nfs_root, info["name"])
+            raw_gt_lines = bundle.raw_annotation_count
+            aligned_gt_lines = bundle.aligned_annotation_count
+            gt_stride = bundle.sampling_stride
+            coordinate_format = bundle.coordinate_format
+        except Exception as exc:
+            coordinate_format = f"invalid: {exc}"
     zip_hint = nfs_root / f"{Path(info['path']).name}.zip"
     valid = (
         seq_dir.is_dir()
@@ -80,6 +96,7 @@ def inspect_sequence(nfs_root: Path, info: dict) -> dict[str, object]:
         "raw_gt_lines": raw_gt_lines,
         "aligned_gt_lines": aligned_gt_lines,
         "gt_stride": gt_stride,
+        "coordinate_format": coordinate_format,
         "valid": valid,
         "zip_present": zip_hint.is_file(),
         "first_frame": first_image,
@@ -96,6 +113,7 @@ def print_table(rows: list[dict[str, object]]) -> None:
         "raw_gt_lines",
         "aligned_gt_lines",
         "gt_stride",
+        "coordinate_format",
         "valid",
         "zip_present",
         "path",

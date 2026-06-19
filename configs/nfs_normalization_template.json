@@ -1,0 +1,14 @@
+{
+  "raw_nfs_root": "/speed-scratch/a_idrais/nfs",
+  "normalized_nfs_root": "/speed-scratch/a_idrais/nfs_ostrack_normalized",
+  "project_root": "/speed-scratch/a_idrais/Paper_2_Mamba_Tracking",
+  "coordinate_conversion": "raw_xyxy_to_canonical_xywh",
+  "alignment_rule": "selected_raw_index = initOmit + frame_position * round((raw_annotation_count - initOmit) / image_count)",
+  "required_checks": [
+    "annotation_count_equals_image_count",
+    "positive_xywh_width_height",
+    "nfs_cheetah_shape_167x4",
+    "nfs_walking_shape_555x4",
+    "representative_rows_corrected"
+  ]
+}

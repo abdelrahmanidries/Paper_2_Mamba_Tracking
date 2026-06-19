@@ -20,6 +20,11 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts.evaluate_tracking_result import compute_metrics, load_boxes
+from src.evaluation.nfs_annotations import (
+    get_sequence_info as shared_get_sequence_info,
+    load_canonical_nfs_ground_truth,
+    metadata_frame_paths,
+)
 
 
 NFS_DATASET_PY = ROOT / "external" / "OSTrack" / "lib" / "test" / "evaluation" / "nfsdataset.py"
@@ -80,10 +85,18 @@ def load_sequence_info() -> list[dict]:
 
 
 def get_sequence_info(sequence: str) -> dict:
-    for info in load_sequence_info():
-        if info["name"] == sequence:
-            return info
-    raise ValueError(f"Unknown NFS sequence: {sequence}")
+    info = shared_get_sequence_info(sequence)
+    return {
+        "name": info.name,
+        "path": info.path,
+        "startFrame": info.start_frame,
+        "endFrame": info.end_frame,
+        "nz": info.nz,
+        "ext": info.ext,
+        "anno_path": info.anno_path,
+        "object_class": info.object_class,
+        "initOmit": info.init_omit,
+    }
 
 
 def count_nonempty_lines(path: Path) -> int:
@@ -111,41 +124,16 @@ def aligned_annotation_indices(raw_count: int, expected_frames: int, init_omit: 
 
 
 def load_aligned_gt(anno_path: Path, info: dict):
-    raw = load_boxes(anno_path)
-    expected_frames = frame_count(info)
-    indices, stride = aligned_annotation_indices(len(raw), expected_frames, int(info.get("initOmit", 0)))
-    if len(indices) != expected_frames:
-        raise ValueError(
-            f"Frame/aligned annotation mismatch for {info['name']}: "
-            f"frames={expected_frames} raw_gt={len(raw)} aligned_gt={len(indices)}"
-        )
-    return raw[indices, :], len(raw), stride
+    bundle = load_canonical_nfs_ground_truth(anno_path.parents[1], str(info["name"]))
+    return bundle.gt_xywh, bundle.raw_annotation_count, bundle.sampling_stride
 
 
 def validate_nfs_sequence(root: Path, sequence: str) -> dict:
     info = get_sequence_info(sequence)
-    seq_dir = root / info["path"]
-    anno_path = root / info["anno_path"]
-    start = int(info["startFrame"]) + int(info.get("initOmit", 0))
-    end = int(info["endFrame"])
-    nz = int(info["nz"])
-    ext = str(info["ext"])
-    first = seq_dir / f"{start:0{nz}}.{ext}"
-    last = seq_dir / f"{end:0{nz}}.{ext}"
-    if not seq_dir.is_dir():
-        raise FileNotFoundError(f"NFS sequence image directory not found: {seq_dir}")
-    if not anno_path.is_file():
-        raise FileNotFoundError(f"NFS annotation file not found: {anno_path}")
-    if not first.is_file() or not last.is_file():
-        raise FileNotFoundError(f"Missing first/last NFS frame for {sequence}: {first}, {last}")
-    frames = end - start + 1
-    raw_gt_lines = count_nonempty_lines(anno_path)
-    indices, _ = aligned_annotation_indices(raw_gt_lines, frames, int(info.get("initOmit", 0)))
-    if len(indices) != frames:
-        raise ValueError(
-            f"Frame/aligned annotation mismatch for {sequence}: "
-            f"frames={frames} raw_gt={raw_gt_lines} aligned_gt={len(indices)}"
-        )
+    bundle = load_canonical_nfs_ground_truth(root, sequence)
+    frames = metadata_frame_paths(root, shared_get_sequence_info(sequence))
+    if len(bundle.gt_xywh) != len(frames):
+        raise ValueError(f"Frame/aligned annotation mismatch for {sequence}: frames={len(frames)} aligned_gt={len(bundle.gt_xywh)}")
     return info
 
 
@@ -329,12 +317,12 @@ def main() -> int:
         print(f"Dataset name: nfs")
         print(f"Sequence path: {info['path']}")
         print(f"Annotation path: {info['anno_path']}")
-        raw_gt_lines = count_nonempty_lines(eval_nfs_root / info["anno_path"])
-        indices, stride = aligned_annotation_indices(raw_gt_lines, frame_count(info), int(info.get("initOmit", 0)))
-        print(f"Frame count: {frame_count(info)}")
-        print(f"Raw annotation lines: {raw_gt_lines}")
-        print(f"Aligned annotation lines: {len(indices)}")
-        print(f"Annotation stride: {stride}")
+        bundle = load_canonical_nfs_ground_truth(eval_nfs_root, args.sequence)
+        print(f"Frame count: {bundle.image_count}")
+        print(f"Raw annotation lines: {bundle.raw_annotation_count}")
+        print(f"Aligned annotation lines: {bundle.aligned_annotation_count}")
+        print(f"Annotation stride: {bundle.sampling_stride}")
+        print(f"Coordinate format: {bundle.coordinate_format}")
         print(f"Expected checkpoint: {checkpoint}")
         print(f"Output directory: {run_dir}")
         return 0

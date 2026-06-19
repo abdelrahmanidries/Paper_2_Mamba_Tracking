@@ -20,6 +20,11 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts.evaluate_tracking_result import box_iou_xywh, center_error, load_boxes
+from src.evaluation.nfs_annotations import (
+    get_sequence_info as shared_get_sequence_info,
+    load_canonical_nfs_ground_truth,
+    metadata_frame_paths,
+)
 
 
 NFS_DATASET_PY = ROOT / "external" / "OSTrack" / "lib" / "test" / "evaluation" / "nfsdataset.py"
@@ -56,10 +61,18 @@ def load_nfs_sequence_info() -> list[dict]:
 
 
 def get_sequence_info(sequence: str) -> dict:
-    for info in load_nfs_sequence_info():
-        if info["name"] == sequence:
-            return info
-    raise ValueError(f"Unknown NFS sequence: {sequence}")
+    info = shared_get_sequence_info(sequence)
+    return {
+        "name": info.name,
+        "path": info.path,
+        "startFrame": info.start_frame,
+        "endFrame": info.end_frame,
+        "nz": info.nz,
+        "ext": info.ext,
+        "anno_path": info.anno_path,
+        "object_class": info.object_class,
+        "initOmit": info.init_omit,
+    }
 
 
 def frame_count(info: dict) -> int:
@@ -92,15 +105,8 @@ def aligned_annotation_indices(raw_count: int, expected_frames: int, init_omit: 
 
 
 def load_aligned_gt(anno_path: Path, info: dict) -> tuple[np.ndarray, int, int]:
-    raw = load_boxes(anno_path)
-    expected = frame_count(info)
-    indices, stride = aligned_annotation_indices(len(raw), expected, int(info.get("initOmit", 0)))
-    if len(indices) != expected:
-        raise ValueError(
-            f"Frame/aligned annotation mismatch for {info['name']}: "
-            f"frames={expected} raw_gt={len(raw)} aligned_gt={len(indices)}"
-        )
-    return raw[indices, :], len(raw), stride
+    bundle = load_canonical_nfs_ground_truth(anno_path.parents[1], str(info["name"]))
+    return bundle.gt_xywh, bundle.raw_annotation_count, bundle.sampling_stride
 
 
 def read_rows(path: Path) -> list[dict[str, str]]:
@@ -420,7 +426,7 @@ def inspect_case(cfg: dict, case: dict, args: argparse.Namespace, result_rows: l
     save_visuals = bool(args.save_visuals or cfg.get("save_visuals", False))
     max_visual_frames = args.max_visual_frames if args.max_visual_frames is not None else int(cfg.get("max_visual_frames", 30))
     if save_visuals and max_visual_frames > 0:
-        frames = frame_paths(frames_root, info)
+        frames = metadata_frame_paths(frames_root, shared_get_sequence_info(sequence))
         summary["visual_frames_saved"] = draw_visuals(
             case_dir,
             frames,
