@@ -1,12 +1,18 @@
 from pathlib import Path
+import subprocess
+import sys
+import types
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from PIL import Image
 
 from src.evaluation.nfs_annotations import (
     alignment_indices,
     load_canonical_nfs_ground_truth,
     load_raw_nfs_annotations,
+    load_sequence_metadata,
     validate_raw_xyxy,
     xyxy_to_xywh,
 )
@@ -100,3 +106,72 @@ def test_normalized_loader_output_shape_matches_frame_count(tmp_path: Path):
 
     assert bundle.gt_xywh.shape == (167, 4)
     assert bundle.coordinate_format == "canonical_xywh"
+
+
+def test_degraded_nfs_root_preserves_complete_annotation_tree_and_loader_constructs(monkeypatch, tmp_path: Path):
+    clean = tmp_path / "normalized_nfs"
+    output_root = tmp_path / "degraded"
+    (clean / "sequences").mkdir(parents=True)
+    (clean / "anno").mkdir(parents=True)
+    (clean / "normalization_manifest.json").write_text('{"sequences": []}\n', encoding="utf-8")
+
+    target = "nfs_basketball_player"
+    for info in load_sequence_metadata():
+        seq_dir = clean / info.path
+        seq_dir.mkdir(parents=True)
+        rows = ["10.000000\t20.000000\t30.000000\t40.000000" for _ in range(info.frame_count)]
+        (clean / info.anno_path).write_text("\n".join(rows) + "\n", encoding="utf-8")
+        if info.name == target:
+            for frame in range(info.start_frame + info.init_omit, info.end_frame + 1):
+                Image.new("RGB", (64, 64), color=(frame % 255, 32, 64)).save(seq_dir / f"{frame:0{info.nz}}.{info.ext}")
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/create_degraded_nfs_sequence.py",
+            "--clean_nfs_root",
+            str(clean),
+            "--sequence",
+            target,
+            "--degradation",
+            "motion_blur",
+            "--severity",
+            "medium",
+            "--seed",
+            "42",
+            "--output_root",
+            str(output_root),
+        ],
+        check=True,
+    )
+
+    degraded = output_root / "nfs_nfs_basketball_player_motion_blur_medium"
+    assert (degraded / "anno" / "nfs_Gymnastics.txt").is_file()
+    assert (degraded / "anno" / "nfs_basketball_player.txt").is_file()
+    assert len(list((degraded / "anno").glob("*.txt"))) == len(load_sequence_metadata())
+    assert len([p for p in (degraded / "sequences").iterdir() if p.is_dir() or p.is_symlink()]) == len(load_sequence_metadata())
+
+    ostrack_root = Path("external/OSTrack").resolve()
+    sys.path.insert(0, str(ostrack_root))
+    fake_train = types.ModuleType("lib.train")
+    fake_train_data = types.ModuleType("lib.train.data")
+    fake_image_loader = types.ModuleType("lib.train.data.image_loader")
+    fake_image_loader.imread_indexed = lambda path: None
+    fake_test_utils = types.ModuleType("lib.test.utils")
+    fake_load_text = types.ModuleType("lib.test.utils.load_text")
+    fake_load_text.load_text = lambda path, delimiter="\t", dtype=np.float64: np.loadtxt(path, delimiter=delimiter, dtype=dtype)
+    monkeypatch.setitem(sys.modules, "lib.train", fake_train)
+    monkeypatch.setitem(sys.modules, "lib.train.data", fake_train_data)
+    monkeypatch.setitem(sys.modules, "lib.train.data.image_loader", fake_image_loader)
+    monkeypatch.setitem(sys.modules, "lib.test.utils", fake_test_utils)
+    monkeypatch.setitem(sys.modules, "lib.test.utils.load_text", fake_load_text)
+    from lib.test.evaluation import data as eval_data
+    from lib.test.evaluation.nfsdataset import NFSDataset
+
+    monkeypatch.setattr(eval_data, "env_settings", lambda: SimpleNamespace(nfs_path=str(degraded)))
+    dataset = NFSDataset()
+    sequence_list = dataset.get_sequence_list()
+    selected = sequence_list[target]
+
+    assert len(sequence_list) == len(load_sequence_metadata())
+    assert selected.ground_truth_rect.shape == (369, 4)

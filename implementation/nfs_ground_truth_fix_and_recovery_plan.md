@@ -56,6 +56,33 @@ nfs_ostrack_normalized/
 
 Images are reused through symlinks where possible. Annotation files are rewritten to contain exactly one canonical XYWH row per evaluated image.
 
+## Degraded Root Construction Fix
+
+OSTrack constructs the complete NFS sequence list even when `tracking/test.py` is called with one selected sequence. Therefore, a degraded single-sequence root must still preserve the complete normalized NFS layout.
+
+The corrected degraded-root layout is:
+
+```text
+nfs_<sequence>_<degradation>_<severity>/
+  normalization_manifest.json
+  anno/                  # complete symlink/copy from normalized clean root
+  sequences/
+    <target>/            # copied target directory with degraded frames
+    <non-target>/        # symlinked to normalized clean root
+```
+
+Annotations never change under image degradation, so `anno/` is mirrored in full from the normalized clean root. The target sequence keeps the same annotation file as the clean normalized root, and only the target images are degraded.
+
+After creating a degraded root, `scripts/create_degraded_nfs_sequence.py` validates:
+
+- degraded annotation-file count equals normalized annotation-file count
+- degraded sequence-directory count equals normalized sequence-directory count
+- every sequence entry in `external/OSTrack/lib/test/evaluation/nfsdataset.py` has a sequence directory and annotation file
+- target annotation count equals target image count
+- target annotations are canonical aligned XYWH
+
+The test suite creates a temporary normalized NFS root, degrades `nfs_basketball_player`, and verifies that OSTrack's full `NFSDataset` can be constructed from the degraded root without running a tracker.
+
 ## Exact Recovery Order
 
 1. Export invalid NFS rows:

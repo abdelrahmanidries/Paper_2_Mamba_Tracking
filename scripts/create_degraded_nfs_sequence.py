@@ -19,7 +19,8 @@ if str(ROOT) not in sys.path:
 
 from src.degradations.pipeline import apply_degradation
 from src.degradations.protocols import DEGRADATION_TYPES, SEVERITIES
-from src.evaluation.nfs_annotations import dump_manifest, load_canonical_nfs_ground_truth, manifest_record, write_xywh_annotations
+from src.evaluation.nfs_annotations import get_sequence_info as shared_get_sequence_info
+from src.evaluation.nfs_annotations import load_canonical_nfs_ground_truth, load_sequence_metadata
 
 
 NFS_DATASET_PY = ROOT / "external" / "OSTrack" / "lib" / "test" / "evaluation" / "nfsdataset.py"
@@ -113,6 +114,10 @@ def validate(args: argparse.Namespace, info: dict) -> None:
         raise FileNotFoundError(
             f"NFS root must use OSTrack layout with sequences/ and anno/: {args.clean_nfs_root}"
         )
+    if not (args.clean_nfs_root / "normalization_manifest.json").is_file():
+        raise FileNotFoundError(
+            f"Clean NFS root must be the normalized root with normalization_manifest.json: {args.clean_nfs_root}"
+        )
     anno_path = args.clean_nfs_root / info["anno_path"]
     if not anno_path.is_file():
         raise FileNotFoundError(f"Annotation file not found: {anno_path}")
@@ -124,23 +129,83 @@ def validate(args: argparse.Namespace, info: dict) -> None:
         raise ValueError(f"Frame/aligned annotation mismatch for {args.sequence}: frames={len(frames)} aligned_gt={bundle.aligned_annotation_count}")
 
 
-def mirror_nfs_root(clean_root: Path, output_root: Path, target_name: str) -> int:
+def mirror_nfs_root(clean_root: Path, output_root: Path, target_name: str) -> tuple[int, int]:
     output_root.mkdir(parents=True, exist_ok=True)
-    mirrored = 0
+    mirrored_root_entries = 0
     for entry in sorted(clean_root.iterdir()):
-        if entry.name in {"sequences", "anno"}:
+        if entry.name == "sequences":
             continue
         link_or_copy(entry, output_root / entry.name, directory=entry.is_dir())
-        mirrored += 1
+        mirrored_root_entries += 1
 
     output_seq_root = output_root / "sequences"
     output_seq_root.mkdir(parents=True, exist_ok=True)
+    mirrored_sequence_dirs = 0
     for seq_dir in sorted((clean_root / "sequences").iterdir()):
         if not seq_dir.is_dir() or seq_dir.name == target_name:
             continue
         link_or_copy(seq_dir, output_seq_root / seq_dir.name, directory=True)
-        mirrored += 1
-    return mirrored
+        mirrored_sequence_dirs += 1
+    return mirrored_root_entries, mirrored_sequence_dirs
+
+
+def count_annotation_files(root: Path) -> int:
+    anno_root = root / "anno"
+    if not anno_root.is_dir():
+        return 0
+    return sum(1 for path in anno_root.glob("*.txt") if path.is_file())
+
+
+def count_sequence_dirs(root: Path) -> int:
+    seq_root = root / "sequences"
+    if not seq_root.is_dir():
+        return 0
+    return sum(1 for path in seq_root.iterdir() if path.is_dir() or path.is_symlink())
+
+
+def validate_complete_degraded_root(clean_root: Path, degraded_root: Path, sequence: str) -> dict[str, object]:
+    clean_anno_count = count_annotation_files(clean_root)
+    degraded_anno_count = count_annotation_files(degraded_root)
+    clean_seq_count = count_sequence_dirs(clean_root)
+    degraded_seq_count = count_sequence_dirs(degraded_root)
+    if degraded_anno_count != clean_anno_count:
+        raise ValueError(f"Annotation file count mismatch: clean={clean_anno_count} degraded={degraded_anno_count}")
+    if degraded_seq_count != clean_seq_count:
+        raise ValueError(f"Sequence directory count mismatch: clean={clean_seq_count} degraded={degraded_seq_count}")
+
+    missing = []
+    for info in load_sequence_metadata():
+        if not (degraded_root / info.path).is_dir():
+            missing.append(f"sequence_dir:{info.name}:{info.path}")
+        if not (degraded_root / info.anno_path).is_file():
+            missing.append(f"annotation:{info.name}:{info.anno_path}")
+    if missing:
+        raise FileNotFoundError(f"Degraded NFS root is incomplete: {missing[:5]}")
+
+    bundle = load_canonical_nfs_ground_truth(degraded_root, sequence)
+    if bundle.coordinate_format != "canonical_xywh":
+        raise ValueError(f"Target annotations are not canonical XYWH: {bundle.coordinate_format}")
+    target_info = shared_get_sequence_info(sequence)
+    target_frames = frame_paths(degraded_root, {
+        "startFrame": target_info.start_frame,
+        "endFrame": target_info.end_frame,
+        "initOmit": target_info.init_omit,
+        "nz": target_info.nz,
+        "ext": target_info.ext,
+        "path": target_info.path,
+    })
+    if bundle.aligned_annotation_count != len(target_frames):
+        raise ValueError(
+            f"Target annotation/frame mismatch: annotations={bundle.aligned_annotation_count} frames={len(target_frames)}"
+        )
+    return {
+        "clean_annotation_files": clean_anno_count,
+        "degraded_annotation_files": degraded_anno_count,
+        "clean_sequence_dirs": clean_seq_count,
+        "degraded_sequence_dirs": degraded_seq_count,
+        "target_aligned_annotation_rows": bundle.aligned_annotation_count,
+        "target_coordinate_format": bundle.coordinate_format,
+    }
 
 
 def main() -> int:
@@ -150,11 +215,8 @@ def main() -> int:
 
     target_name = Path(info["path"]).name
     output_root = args.output_root / f"nfs_{args.sequence}_{args.degradation}_{args.severity}"
-    mirrored = mirror_nfs_root(args.clean_nfs_root, output_root, target_name)
+    mirrored_root_entries, mirrored_sequence_dirs = mirror_nfs_root(args.clean_nfs_root, output_root, target_name)
     bundle = load_canonical_nfs_ground_truth(args.clean_nfs_root, args.sequence)
-    output_anno = output_root / info["anno_path"]
-    write_xywh_annotations(output_anno, bundle.gt_xywh)
-    dump_manifest(output_root / "normalization_manifest.json", [manifest_record(bundle, output_anno)])
 
     clean_target_dir = args.clean_nfs_root / info["path"]
     output_target_dir = output_root / info["path"]
@@ -213,13 +275,18 @@ def main() -> int:
     raw_anno_lines = bundle.raw_annotation_count
     aligned_anno_lines = bundle.aligned_annotation_count
     gt_stride = bundle.sampling_stride
+    validation_summary = validate_complete_degraded_root(args.clean_nfs_root, output_root, args.sequence)
     print(f"Output root: {output_root}")
-    print(f"Mirrored non-target entries: {mirrored}")
-    print(f"Processed frames: {processed}")
+    print(f"Mirrored root entries: {mirrored_root_entries}")
+    print(f"Mirrored sequence directories: {mirrored_sequence_dirs}")
+    print(f"Annotation files available: {validation_summary['degraded_annotation_files']}")
+    print(f"Sequence directories available: {validation_summary['degraded_sequence_dirs']}")
+    print(f"Processed target frames: {processed}")
     print(f"Raw annotation lines: {raw_anno_lines}")
     print(f"Aligned annotation lines: {aligned_anno_lines}")
+    print(f"Target aligned annotation rows: {validation_summary['target_aligned_annotation_rows']}")
     print(f"Annotation stride: {gt_stride}")
-    print(f"Coordinate format: {bundle.coordinate_format}")
+    print(f"Coordinate format: {validation_summary['target_coordinate_format']}")
     print(f"Degradation type: {args.degradation}")
     print(f"Severity: {args.severity}")
     print(f"Seed: {args.seed}")
