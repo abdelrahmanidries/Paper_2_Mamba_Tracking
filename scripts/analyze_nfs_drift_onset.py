@@ -228,17 +228,113 @@ def classify_failure(
     scale_idx: int | None,
     recovery: bool,
 ) -> str:
-    if divergence_idx is not None and (shared_idx is None or divergence_idx < shared_idx):
-        if recovery:
-            return "temporary RG-SSB-specific failure with recovery"
-        return "persistent RG-SSB-specific target loss"
-    if shared_idx is not None and (divergence_idx is None or shared_idx <= divergence_idx):
-        return "shared tracker failure"
-    if jump_idx is not None:
-        return "sudden center jump"
-    if scale_idx is not None:
-        return "scale collapse or expansion"
-    return "ambiguous"
+    sequence = classify_event_sequence(
+        divergence_idx=divergence_idx,
+        shared_idx=shared_idx,
+        jump_idx=jump_idx,
+        scale_idx=scale_idx,
+        rgssb_recovered_after_divergence=recovery,
+        baseline_recovered_after_shared=False,
+        rgssb_recovered_after_shared=False,
+    )
+    return str(sequence["terminal_failure_mode"])
+
+
+def event_label(event_type: str) -> str:
+    labels = {
+        "shared": "shared tracker failure",
+        "divergence": "RG-SSB-specific divergence",
+        "jump": "sudden center jump",
+        "scale": "scale collapse or expansion",
+    }
+    return labels[event_type]
+
+
+def ordered_events(
+    divergence_idx: int | None,
+    shared_idx: int | None,
+    jump_idx: int | None,
+    scale_idx: int | None,
+) -> list[tuple[int, int, str]]:
+    candidates = [
+        (shared_idx, 0, "shared"),
+        (divergence_idx, 1, "divergence"),
+        (jump_idx, 2, "jump"),
+        (scale_idx, 3, "scale"),
+    ]
+    return sorted((int(idx), order, name) for idx, order, name in candidates if idx is not None)
+
+
+def classify_event_sequence(
+    divergence_idx: int | None,
+    shared_idx: int | None,
+    jump_idx: int | None,
+    scale_idx: int | None,
+    rgssb_recovered_after_divergence: bool,
+    baseline_recovered_after_shared: bool,
+    rgssb_recovered_after_shared: bool,
+) -> dict[str, object]:
+    events = ordered_events(divergence_idx, shared_idx, jump_idx, scale_idx)
+    if not events:
+        return {
+            "initial_failure_mode": "ambiguous",
+            "subsequent_failure_mode": "ambiguous",
+            "terminal_failure_mode": "ambiguous",
+            "event_sequence": "ambiguous",
+            "persistent_rgssb_loss_after_shared_failure": False,
+        }
+
+    initial_idx, _, initial_type = events[0]
+    initial_mode = event_label(initial_type)
+    later_events = [event for event in events[1:] if event[0] > initial_idx]
+    subsequent_mode = event_label(later_events[0][2]) if later_events else ""
+
+    divergence_after_shared = shared_idx is not None and divergence_idx is not None and shared_idx < divergence_idx
+    persistent_after_shared = bool(
+        divergence_after_shared and baseline_recovered_after_shared and not rgssb_recovered_after_divergence
+    )
+
+    rgssb_specific_terminal = bool(
+        divergence_idx is not None
+        and (shared_idx is None or divergence_idx < shared_idx or baseline_recovered_after_shared)
+    )
+    if rgssb_specific_terminal:
+        terminal_mode = (
+            "temporary RG-SSB-specific failure with recovery"
+            if rgssb_recovered_after_divergence
+            else "persistent RG-SSB-specific target loss"
+        )
+    elif initial_type == "shared":
+        terminal_mode = "shared tracker failure"
+    elif initial_type == "jump":
+        terminal_mode = "sudden center jump"
+    elif initial_type == "scale":
+        terminal_mode = "scale collapse or expansion"
+    else:
+        terminal_mode = "ambiguous"
+
+    sequence_parts = [initial_mode]
+    if initial_type == "shared" and baseline_recovered_after_shared:
+        sequence_parts.append("baseline recovery")
+    if subsequent_mode:
+        if persistent_after_shared:
+            sequence_parts.append("persistent RG-SSB target loss")
+        elif later_events[0][2] == "divergence" and rgssb_recovered_after_divergence:
+            sequence_parts.append("temporary RG-SSB-specific failure with recovery")
+        else:
+            sequence_parts.append(subsequent_mode)
+    elif initial_type == "divergence" and not rgssb_recovered_after_divergence:
+        sequence_parts[-1] = "persistent RG-SSB target loss"
+    elif initial_type == "divergence" and rgssb_recovered_after_divergence:
+        sequence_parts[-1] = "temporary RG-SSB-specific failure with recovery"
+
+    return {
+        "initial_failure_mode": initial_mode,
+        "subsequent_failure_mode": subsequent_mode,
+        "terminal_failure_mode": terminal_mode,
+        "event_sequence": " -> ".join(sequence_parts),
+        "persistent_rgssb_loss_after_shared_failure": persistent_after_shared,
+    }
 
 
 def event_row(event_type: str, idx: int | None, data: dict[str, np.ndarray], extra: dict[str, object] | None = None) -> dict[str, object]:
@@ -370,7 +466,18 @@ def analyze_case(
 
     first_failure_idx = min([idx for idx in [divergence_idx, shared_idx, jump_idx, scale_idx] if idx is not None], default=None)
     recovered, recovery_idx = recovery_after(rgssb_iou, divergence_idx, run_length=5)
-    classification = classify_failure(divergence_idx, shared_idx, jump_idx, scale_idx, recovered)
+    baseline_recovered_after_shared, baseline_shared_recovery_idx = recovery_after(baseline_iou, shared_idx, run_length=5)
+    rgssb_recovered_after_shared, rgssb_shared_recovery_idx = recovery_after(rgssb_iou, shared_idx, run_length=5)
+    sequence_classification = classify_event_sequence(
+        divergence_idx=divergence_idx,
+        shared_idx=shared_idx,
+        jump_idx=jump_idx,
+        scale_idx=scale_idx,
+        rgssb_recovered_after_divergence=recovered,
+        baseline_recovered_after_shared=baseline_recovered_after_shared,
+        rgssb_recovered_after_shared=rgssb_recovered_after_shared,
+    )
+    classification = str(sequence_classification["terminal_failure_mode"])
 
     comp = comparison_row(comparison_rows, sequence, degradation, severity, seed)
     auc_change = to_float(comp.get("auc_change") if comp else case.get("corrected_auc_change"))
@@ -385,6 +492,8 @@ def analyze_case(
         event_row("first_large_rgssb_center_jump", jump_idx, data, {"center_displacement_px": float(center_steps[jump_idx]) if jump_idx is not None else ""}),
         event_row("first_severe_scale_change", scale_idx, data, {"area_ratio": float(area_ratios[scale_idx]) if scale_idx is not None else ""}),
         event_row("first_recovery", recovery_idx, data, {"recovered": recovered}),
+        event_row("baseline_recovery_after_shared_failure", baseline_shared_recovery_idx, data, {"recovered": baseline_recovered_after_shared}),
+        event_row("rgssb_recovery_after_shared_failure", rgssb_shared_recovery_idx, data, {"recovered": rgssb_recovered_after_shared}),
     ]
     event_fields = [
         "event_type",
@@ -415,6 +524,7 @@ def analyze_case(
         "rgssb_auc": rgssb_auc,
         "auc_change": auc_change,
         "first_divergence_frame": int(divergence_idx + 1) if divergence_idx is not None else None,
+        "first_rgssb_specific_divergence_frame": int(divergence_idx + 1) if divergence_idx is not None else None,
         "baseline_iou_at_divergence": float(baseline_iou[divergence_idx]) if divergence_idx is not None else None,
         "rgssb_iou_at_divergence": float(rgssb_iou[divergence_idx]) if divergence_idx is not None else None,
         "first_shared_failure_frame": int(shared_idx + 1) if shared_idx is not None else None,
@@ -422,6 +532,15 @@ def analyze_case(
         "first_center_jump_px": float(center_steps[jump_idx]) if jump_idx is not None else None,
         "first_scale_change_frame": int(scale_idx + 1) if scale_idx is not None else None,
         "first_area_ratio": float(area_ratios[scale_idx]) if scale_idx is not None else None,
+        "initial_failure_mode": sequence_classification["initial_failure_mode"],
+        "subsequent_failure_mode": sequence_classification["subsequent_failure_mode"],
+        "terminal_failure_mode": sequence_classification["terminal_failure_mode"],
+        "event_sequence": sequence_classification["event_sequence"],
+        "baseline_recovered_after_shared_failure": baseline_recovered_after_shared,
+        "baseline_recovery_after_shared_failure_frame": int(baseline_shared_recovery_idx + 1) if baseline_shared_recovery_idx is not None else None,
+        "rgssb_recovered_after_shared_failure": rgssb_recovered_after_shared,
+        "rgssb_recovery_after_shared_failure_frame": int(rgssb_shared_recovery_idx + 1) if rgssb_shared_recovery_idx is not None else None,
+        "persistent_rgssb_loss_after_shared_failure": sequence_classification["persistent_rgssb_loss_after_shared_failure"],
         "consecutive_failed_frames": int(divergence_run or shared_run),
         "recovery_status": "recovered" if recovered else "no_recovery_detected",
         "recovery_frame": int(recovery_idx + 1) if recovery_idx is not None else None,
@@ -440,10 +559,21 @@ def analyze_case(
         "seed": int(seed),
         "auc_change": f"{auc_change:+.6f}" if not math.isnan(auc_change) else "nan",
         "first_divergence_frame": summary["first_divergence_frame"] or "",
+        "first_rgssb_specific_divergence_frame": summary["first_rgssb_specific_divergence_frame"] or "",
+        "first_shared_failure_frame": summary["first_shared_failure_frame"] or "",
+        "first_center_jump_frame": summary["first_center_jump_frame"] or "",
+        "first_scale_change_frame": summary["first_scale_change_frame"] or "",
         "baseline_iou_at_divergence": f"{summary['baseline_iou_at_divergence']:.6f}" if summary["baseline_iou_at_divergence"] is not None else "",
         "rgssb_iou_at_divergence": f"{summary['rgssb_iou_at_divergence']:.6f}" if summary["rgssb_iou_at_divergence"] is not None else "",
         "center_jump": f"{summary['first_center_jump_px']:.6f}" if summary["first_center_jump_px"] is not None else "",
         "area_ratio": f"{summary['first_area_ratio']:.6f}" if summary["first_area_ratio"] is not None else "",
+        "initial_failure_mode": summary["initial_failure_mode"],
+        "subsequent_failure_mode": summary["subsequent_failure_mode"],
+        "terminal_failure_mode": summary["terminal_failure_mode"],
+        "event_sequence": summary["event_sequence"],
+        "baseline_recovered_after_shared_failure": summary["baseline_recovered_after_shared_failure"],
+        "rgssb_recovered_after_shared_failure": summary["rgssb_recovered_after_shared_failure"],
+        "persistent_rgssb_loss_after_shared_failure": summary["persistent_rgssb_loss_after_shared_failure"],
         "consecutive_failed_frames": summary["consecutive_failed_frames"],
         "recovery_status": summary["recovery_status"],
         "failure_classification": classification,
@@ -508,10 +638,21 @@ def main() -> int:
         "seed",
         "auc_change",
         "first_divergence_frame",
+        "first_rgssb_specific_divergence_frame",
+        "first_shared_failure_frame",
+        "first_center_jump_frame",
+        "first_scale_change_frame",
         "baseline_iou_at_divergence",
         "rgssb_iou_at_divergence",
         "center_jump",
         "area_ratio",
+        "initial_failure_mode",
+        "subsequent_failure_mode",
+        "terminal_failure_mode",
+        "event_sequence",
+        "baseline_recovered_after_shared_failure",
+        "rgssb_recovered_after_shared_failure",
+        "persistent_rgssb_loss_after_shared_failure",
         "consecutive_failed_frames",
         "recovery_status",
         "failure_classification",
