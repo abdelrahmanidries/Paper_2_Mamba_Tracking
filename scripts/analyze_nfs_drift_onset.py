@@ -227,25 +227,17 @@ def classify_failure(
     jump_idx: int | None,
     scale_idx: int | None,
     recovery: bool,
-    rgssb_iou: np.ndarray,
 ) -> str:
-    first_candidates = [idx for idx in [divergence_idx, shared_idx, jump_idx, scale_idx] if idx is not None]
-    if not first_candidates:
-        return "ambiguous"
-    first_idx = min(first_candidates)
-    if recovery:
-        return "temporary failure with recovery"
-    if shared_idx is not None and shared_idx == first_idx:
+    if divergence_idx is not None and (shared_idx is None or divergence_idx < shared_idx):
+        if recovery:
+            return "temporary RG-SSB-specific failure with recovery"
+        return "persistent RG-SSB-specific target loss"
+    if shared_idx is not None and (divergence_idx is None or shared_idx <= divergence_idx):
         return "shared tracker failure"
-    if scale_idx is not None and scale_idx <= first_idx + 3:
-        return "scale collapse or expansion"
-    if jump_idx is not None and jump_idx <= first_idx + 3:
+    if jump_idx is not None:
         return "sudden center jump"
-    if divergence_idx is not None:
-        window_start = max(0, divergence_idx - 10)
-        if divergence_idx - window_start >= 5 and np.nanmean(rgssb_iou[window_start : divergence_idx + 1]) > rgssb_iou[divergence_idx] + 0.15:
-            return "gradual drift"
-        return "RG-SSB-specific distractor switch"
+    if scale_idx is not None:
+        return "scale collapse or expansion"
     return "ambiguous"
 
 
@@ -377,8 +369,8 @@ def analyze_case(
     scale_idx = int(scale_hits[0]) if len(scale_hits) else None
 
     first_failure_idx = min([idx for idx in [divergence_idx, shared_idx, jump_idx, scale_idx] if idx is not None], default=None)
-    recovered, recovery_idx = recovery_after(rgssb_iou, first_failure_idx, run_length=5)
-    classification = classify_failure(divergence_idx, shared_idx, jump_idx, scale_idx, recovered, rgssb_iou)
+    recovered, recovery_idx = recovery_after(rgssb_iou, divergence_idx, run_length=5)
+    classification = classify_failure(divergence_idx, shared_idx, jump_idx, scale_idx, recovered)
 
     comp = comparison_row(comparison_rows, sequence, degradation, severity, seed)
     auc_change = to_float(comp.get("auc_change") if comp else case.get("corrected_auc_change"))
@@ -409,7 +401,8 @@ def analyze_case(
     ]
     write_csv(output_dir / "drift_events.csv", events, event_fields)
 
-    visuals_saved, contact_sheet = save_contact_sheet(output_dir, cfg, case, data, divergence_idx or first_failure_idx, args.max_contact_frames)
+    contact_center_idx = divergence_idx if divergence_idx is not None else first_failure_idx
+    visuals_saved, contact_sheet = save_contact_sheet(output_dir, cfg, case, data, contact_center_idx, args.max_contact_frames)
     summary = {
         "sequence": sequence,
         "condition": f"{degradation} {severity}",
