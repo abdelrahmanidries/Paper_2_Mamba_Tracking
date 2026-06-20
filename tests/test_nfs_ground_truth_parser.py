@@ -9,10 +9,12 @@ import pytest
 from PIL import Image
 
 from src.evaluation.nfs_annotations import (
+    canonical_sequence_info,
     alignment_indices,
     load_canonical_nfs_ground_truth,
     load_raw_nfs_annotations,
     load_sequence_metadata,
+    metadata_frame_paths,
     validate_raw_xyxy,
     xyxy_to_xywh,
 )
@@ -106,6 +108,82 @@ def test_normalized_loader_output_shape_matches_frame_count(tmp_path: Path):
 
     assert bundle.gt_xywh.shape == (167, 4)
     assert bundle.coordinate_format == "canonical_xywh"
+
+
+def test_ostrack_style_dict_converts_to_canonical_metadata_for_bowling():
+    source = {
+        "name": "nfs_bowling_1",
+        "path": "sequences/bowling_1",
+        "startFrame": 1,
+        "endFrame": 150,
+        "nz": 5,
+        "ext": "jpg",
+        "anno_path": "anno/nfs_bowling_1.txt",
+        "object_class": "ball",
+        "initOmit": 0,
+    }
+
+    info = canonical_sequence_info(source)
+
+    assert info.name == "nfs_bowling_1"
+    assert info.path == "sequences/bowling_1"
+    assert info.start_frame == 1
+    assert info.end_frame == 150
+    assert info.init_omit == 0
+
+
+def test_alias_dict_converts_to_canonical_metadata_for_gymnastics():
+    source = {
+        "sequence": "nfs_Gymnastics",
+        "sequence_path": "sequences/Gymnastics",
+        "start_frame": 1,
+        "end_frame": 368,
+        "zero_padding": 5,
+        "extension": "jpg",
+        "annotation_path": "anno/nfs_Gymnastics.txt",
+        "init_omit": 0,
+    }
+
+    info = canonical_sequence_info(source)
+
+    assert info.name == "nfs_Gymnastics"
+    assert info.path == "sequences/Gymnastics"
+    assert info.frame_count == 368
+
+
+def test_metadata_frame_paths_accepts_converted_dict_metadata():
+    source = {
+        "name": "nfs_Gymnastics",
+        "path": "sequences/Gymnastics",
+        "startFrame": 1,
+        "endFrame": 3,
+        "nz": 5,
+        "ext": "jpg",
+        "anno_path": "anno/nfs_Gymnastics.txt",
+        "initOmit": 0,
+    }
+
+    frames = metadata_frame_paths(Path("/nfs_root"), canonical_sequence_info(source))
+
+    assert frames == [
+        Path("/nfs_root/sequences/Gymnastics/00001.jpg"),
+        Path("/nfs_root/sequences/Gymnastics/00002.jpg"),
+        Path("/nfs_root/sequences/Gymnastics/00003.jpg"),
+    ]
+
+
+def test_missing_required_metadata_field_raises_clear_error():
+    source = {
+        "name": "nfs_Gymnastics",
+        "path": "sequences/Gymnastics",
+        "startFrame": 1,
+        "endFrame": 3,
+        "nz": 5,
+        "anno_path": "anno/nfs_Gymnastics.txt",
+    }
+
+    with pytest.raises(ValueError, match="ext"):
+        canonical_sequence_info(source)
 
 
 def test_degraded_nfs_root_preserves_complete_annotation_tree_and_loader_constructs(monkeypatch, tmp_path: Path):

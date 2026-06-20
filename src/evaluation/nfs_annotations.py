@@ -14,7 +14,7 @@ import re
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable, Mapping
 
 import numpy as np
 from PIL import Image
@@ -96,12 +96,47 @@ def get_sequence_info(sequence: str, nfs_dataset_py: Path = NFS_DATASET_PY) -> N
     raise ValueError(f"Unknown NFS sequence: {sequence}")
 
 
-def metadata_frame_paths(nfs_root: Path, info: NFSSequenceInfo) -> list[Path]:
+def _mapped_value(mapping: Mapping[str, Any], aliases: tuple[str, ...], field_name: str) -> Any:
+    for alias in aliases:
+        if alias in mapping:
+            return mapping[alias]
+    raise ValueError(f"Missing required NFS sequence metadata field '{field_name}' (aliases: {', '.join(aliases)})")
+
+
+def canonical_sequence_info(info: NFSSequenceInfo | Mapping[str, Any]) -> NFSSequenceInfo:
+    """Return canonical NFS metadata from either dataclass or OSTrack-style dict.
+
+    Some project-side scripts historically expose OSTrack-style dictionaries
+    with keys like startFrame/endFrame/initOmit. Shared helpers use the
+    canonical NFSSequenceInfo dataclass. This adapter keeps the conversion
+    explicit without duplicating frame-list or alignment logic.
+    """
+
+    if isinstance(info, NFSSequenceInfo):
+        return info
+    if not isinstance(info, Mapping):
+        raise TypeError(f"Expected NFSSequenceInfo or mapping metadata, got {type(info).__name__}")
+    return NFSSequenceInfo(
+        name=str(_mapped_value(info, ("name", "sequence", "sequence_name"), "name")),
+        path=str(_mapped_value(info, ("path", "sequence_path"), "path")),
+        start_frame=int(_mapped_value(info, ("start_frame", "startFrame"), "start_frame")),
+        end_frame=int(_mapped_value(info, ("end_frame", "endFrame"), "end_frame")),
+        nz=int(_mapped_value(info, ("nz", "zero_padding"), "nz")),
+        ext=str(_mapped_value(info, ("ext", "extension"), "ext")),
+        anno_path=str(_mapped_value(info, ("anno_path", "annotation_path"), "anno_path")),
+        object_class=str(info.get("object_class", "")),
+        init_omit=int(info.get("init_omit", info.get("initOmit", 0))),
+    )
+
+
+def metadata_frame_paths(nfs_root: Path, info: NFSSequenceInfo | Mapping[str, Any]) -> list[Path]:
+    info = canonical_sequence_info(info)
     start = info.start_frame + info.init_omit
     return [nfs_root / info.path / f"{frame:0{info.nz}}.{info.ext}" for frame in range(start, info.end_frame + 1)]
 
 
-def existing_metadata_frame_paths(nfs_root: Path, info: NFSSequenceInfo) -> list[Path]:
+def existing_metadata_frame_paths(nfs_root: Path, info: NFSSequenceInfo | Mapping[str, Any]) -> list[Path]:
+    info = canonical_sequence_info(info)
     frames = metadata_frame_paths(nfs_root, info)
     missing = [path for path in frames if not path.is_file()]
     if missing:

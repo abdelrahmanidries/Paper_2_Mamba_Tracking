@@ -28,10 +28,9 @@ from scripts.inspect_tracking_failure_case import (
     condition_dir_name,
     exact_row,
     get_sequence_info,
-    metadata_frame_paths,
     resolve_result_path,
 )
-from src.evaluation.nfs_annotations import load_canonical_nfs_ground_truth
+from src.evaluation.nfs_annotations import canonical_sequence_info, load_canonical_nfs_ground_truth, metadata_frame_paths
 
 
 BASELINE_CONFIG = "vitb_256_mae_ce_32x4_ep300"
@@ -313,7 +312,7 @@ def save_contact_sheet(
     if not nfs_root.exists():
         print(f"warning: NFS image root unavailable; skipping contact sheet for {case['sequence']}: {nfs_root}")
         return 0, None
-    frames = metadata_frame_paths(nfs_root, get_sequence_info(case["sequence"]))
+    frames = metadata_frame_paths(nfs_root, canonical_sequence_info(get_sequence_info(case["sequence"])))
     indices = frame_window(center_idx, len(data["rgssb_iou"]))
     if len(indices) > max_frames:
         indices = indices[:max_frames]
