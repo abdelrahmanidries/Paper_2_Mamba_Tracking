@@ -1,33 +1,33 @@
-sequence,condition,degradation,severity,seed,baseline_auc,hpc_rgssb_auc,auc_change,baseline_precision_20,hpc_rgssb_precision_20,precision_20_change,baseline_mean_center_error,hpc_rgssb_mean_center_error,center_error_change,best_model,note
-nfs_Gymnastics,clean,clean,none,0,0.311558,0.334912,0.023354,0.002717,0.002717,0.000000,219.966156,232.755920,12.789764,hpc_rgssb,HPC RG-SSB improves AUC over baseline
-nfs_Gymnastics,motion_blur_medium,motion_blur,medium,42,0.313038,0.333244,0.020206,0.002717,0.002717,0.000000,216.565979,230.888397,14.322418,hpc_rgssb,HPC RG-SSB improves AUC over baseline
-nfs_Gymnastics,low_resolution_medium,low_resolution,medium,42,0.311558,0.334992,0.023434,0.002717,0.002717,0.000000,219.442444,233.018723,13.576279,hpc_rgssb,HPC RG-SSB improves AUC over baseline
-nfs_Gymnastics,gaussian_noise_medium,gaussian_noise,medium,42,0.299801,0.320652,0.020851,0.002717,0.002717,0.000000,222.369415,232.899323,10.529908,hpc_rgssb,HPC RG-SSB improves AUC over baseline
-nfs_basketball_player,clean,clean,none,0,0.338378,0.338163,-0.000215,0.005420,0.013550,0.008130,198.464813,204.770325,6.305512,baseline,OSTrack baseline is slightly higher by AUC
-nfs_basketball_player,motion_blur_medium,motion_blur,medium,42,0.331777,0.328289,-0.003488,0.008130,0.008130,0.000000,197.768890,212.031540,14.262650,baseline,OSTrack baseline is slightly higher by AUC
-nfs_basketball_player,low_resolution_medium,low_resolution,medium,42,0.339424,0.327645,-0.011779,0.005420,0.008130,0.002710,195.825607,213.936234,18.110627,baseline,OSTrack baseline is clearly higher by AUC
-nfs_basketball_player,gaussian_noise_medium,gaussian_noise,medium,42,0.383482,0.388553,0.005071,0.016260,0.016260,0.000000,192.111053,193.388809,1.277756,hpc_rgssb,HPC RG-SSB is slightly higher by AUC
-nfs_car,clean,clean,none,0,0.091658,0.157460,0.065802,0.000495,0.000495,0.000000,383.523499,270.597534,-112.925965,hpc_rgssb,HPC RG-SSB improves AUC over baseline
-nfs_car,motion_blur_medium,motion_blur,medium,42,0.079914,0.136663,0.056749,0.000495,0.000495,0.000000,388.015961,248.593597,-139.422364,hpc_rgssb,HPC RG-SSB improves AUC over baseline
-nfs_car,low_resolution_medium,low_resolution,medium,42,0.091089,0.146505,0.055416,0.000495,0.000495,0.000000,381.417053,298.065063,-83.351990,hpc_rgssb,HPC RG-SSB improves AUC over baseline
-nfs_car,gaussian_noise_medium,gaussian_noise,medium,42,0.073895,0.125498,0.051603,0.000495,0.000495,0.000000,689.688232,341.962555,-347.725677,hpc_rgssb,HPC RG-SSB improves AUC over baseline
-nfs_dog,clean,clean,none,0,0.419264,0.414563,-0.004701,0.005825,0.006796,0.000971,159.943039,172.733597,12.790558,baseline,OSTrack baseline is slightly higher by AUC
-nfs_dog,motion_blur_medium,motion_blur,medium,42,0.432145,0.417860,-0.014285,0.008738,0.004854,-0.003884,156.070663,177.837021,21.766358,baseline,OSTrack baseline is clearly higher by AUC
-nfs_dog,low_resolution_medium,low_resolution,medium,42,0.419168,0.414390,-0.004778,0.008738,0.003883,-0.004855,163.471161,174.622116,11.150955,baseline,OSTrack baseline is slightly higher by AUC
-nfs_dog,gaussian_noise_medium,gaussian_noise,medium,42,0.429828,0.428280,-0.001548,0.003883,0.003883,0.000000,176.879272,176.780151,-0.099121,baseline,OSTrack baseline is slightly higher by AUC
-nfs_running,clean,clean,none,0,0.483116,0.480878,-0.002238,0.032496,0.031019,-0.001477,129.966736,151.382156,21.415420,baseline,OSTrack baseline is slightly higher by AUC
-nfs_running,motion_blur_medium,motion_blur,medium,42,0.484681,0.474253,-0.010428,0.035451,0.032496,-0.002955,130.218918,167.277054,37.058136,baseline,OSTrack baseline is clearly higher by AUC
-nfs_running,low_resolution_medium,low_resolution,medium,42,0.482589,0.471372,-0.011217,0.033973,0.035451,0.001478,130.824417,160.233078,29.408661,baseline,OSTrack baseline is clearly higher by AUC
-nfs_running,gaussian_noise_medium,gaussian_noise,medium,42,0.487664,0.512278,0.024614,0.023634,0.016248,-0.007386,118.610733,114.678093,-3.932640,hpc_rgssb,HPC RG-SSB improves AUC over baseline
-nfs_bottle,clean,clean,none,0,0.368912,0.340264,-0.028648,0.023300,0.023300,0.000000,217.255005,245.648010,28.393005,baseline,OSTrack baseline is clearly higher by AUC
-nfs_bottle,motion_blur_medium,motion_blur,medium,42,0.367636,0.337726,-0.029910,0.023300,0.024727,0.001427,219.075607,249.704178,30.628571,baseline,OSTrack baseline is clearly higher by AUC
-nfs_bottle,low_resolution_medium,low_resolution,medium,42,0.368149,0.338526,-0.029623,0.020922,0.023776,0.002854,218.312500,248.432098,30.119598,baseline,OSTrack baseline is clearly higher by AUC
-nfs_bottle,gaussian_noise_medium,gaussian_noise,medium,42,0.390541,0.368973,-0.021568,0.016643,0.018069,0.001426,208.387665,234.473770,26.086105,baseline,OSTrack baseline is clearly higher by AUC
-nfs_bird_2,clean,clean,none,0,0.252434,0.259360,0.006926,0.006303,0.010504,0.004201,272.614838,233.346542,-39.268296,hpc_rgssb,HPC RG-SSB is slightly higher by AUC
-nfs_bird_2,motion_blur_medium,motion_blur,medium,42,0.253682,0.272964,0.019282,0.010504,0.010504,0.000000,267.806854,244.585724,-23.221130,hpc_rgssb,HPC RG-SSB improves AUC over baseline
-nfs_bird_2,low_resolution_medium,low_resolution,medium,42,0.250957,0.272007,0.021050,0.006303,0.012605,0.006302,269.925629,235.609833,-34.315796,hpc_rgssb,HPC RG-SSB improves AUC over baseline
-nfs_bird_2,gaussian_noise_medium,gaussian_noise,medium,42,0.276521,0.260275,-0.016246,0.012605,0.010504,-0.002101,223.684799,215.257858,-8.426941,baseline,OSTrack baseline is clearly higher by AUC
-nfs_walking,clean,clean,none,0,0.222442,0.367193,0.144751,0.030631,0.041441,0.010810,223.869156,169.591141,-54.278015,hpc_rgssb,HPC RG-SSB improves AUC over baseline
-nfs_walking,motion_blur_medium,motion_blur,medium,42,0.404799,0.239247,-0.165552,0.037838,0.023423,-0.014415,151.543518,199.849487,48.305969,baseline,OSTrack baseline is clearly higher by AUC
-nfs_walking,low_resolution_medium,low_resolution,medium,42,0.222977,0.239408,0.016431,0.023423,0.028829,0.005406,223.581696,200.176178,-23.405518,hpc_rgssb,HPC RG-SSB improves AUC over baseline
-nfs_walking,gaussian_noise_medium,gaussian_noise,medium,42,0.584444,0.300009,-0.284435,0.086486,0.021622,-0.064864,91.790886,184.636658,92.845772,baseline,OSTrack baseline is clearly higher by AUC
+sequence,condition,degradation,severity,seed,baseline_auc,hpc_rgssb_auc,auc_change,baseline_mean_iou,hpc_rgssb_mean_iou,mean_iou_change,baseline_precision_20,hpc_rgssb_precision_20,precision_20_change,baseline_mean_center_error,hpc_rgssb_mean_center_error,center_error_change,best_model,outcome,note
+nfs_Gymnastics,clean,clean,none,0,0.452890,0.470405,+0.017515,0.450818,0.468309,+0.017491,0.584239,0.608696,+0.024457,97.004085,94.843526,-2.160559,hpc_rgssb,neutral,near neutral by AUC
+nfs_Gymnastics,motion_blur_medium,motion_blur,medium,42,0.438872,0.456845,+0.017973,0.436761,0.454865,+0.018104,0.543478,0.573370,+0.029892,98.807078,96.673861,-2.133217,hpc_rgssb,neutral,near neutral by AUC
+nfs_Gymnastics,low_resolution_medium,low_resolution,medium,42,0.439706,0.243946,-0.195760,0.437494,0.238543,-0.198951,0.567935,0.315217,-0.252718,98.039800,169.046959,+71.007159,baseline,drop,OSTrack baseline improves AUC
+nfs_Gymnastics,gaussian_noise_medium,gaussian_noise,medium,42,0.457356,0.289954,-0.167402,0.455237,0.284842,-0.170395,0.586957,0.364130,-0.222827,96.941718,164.628917,+67.687199,baseline,drop,OSTrack baseline improves AUC
+nfs_basketball_player,clean,clean,none,0,0.754139,0.746733,-0.007406,0.756384,0.749379,-0.007005,0.981030,0.972900,-0.008130,5.867569,6.077729,+0.210160,baseline,neutral,near neutral by AUC
+nfs_basketball_player,motion_blur_medium,motion_blur,medium,42,0.722450,0.723282,+0.000832,0.724772,0.725518,+0.000746,0.953930,0.940379,-0.013551,6.928502,7.493557,+0.565055,hpc_rgssb,neutral,near neutral by AUC
+nfs_basketball_player,low_resolution_medium,low_resolution,medium,42,0.754568,0.747377,-0.007191,0.757309,0.749541,-0.007768,0.981030,0.978320,-0.002710,5.871871,5.986210,+0.114339,baseline,neutral,near neutral by AUC
+nfs_basketball_player,gaussian_noise_medium,gaussian_noise,medium,42,0.754112,0.729534,-0.024578,0.756502,0.731773,-0.024729,0.983740,0.953930,-0.029810,6.042841,7.180909,+1.138068,baseline,drop,OSTrack baseline improves AUC
+nfs_car,clean,clean,none,0,0.407308,0.407514,+0.000206,0.404475,0.404619,+0.000144,0.484158,0.482178,-0.001980,63.982927,64.336340,+0.353413,hpc_rgssb,neutral,near neutral by AUC
+nfs_car,motion_blur_medium,motion_blur,medium,42,0.769581,0.764582,-0.004999,0.772271,0.767212,-0.005059,0.941089,0.946040,+0.004951,7.530301,7.495709,-0.034592,baseline,neutral,near neutral by AUC
+nfs_car,low_resolution_medium,low_resolution,medium,42,0.410126,0.411371,+0.001245,0.407264,0.408484,+0.001220,0.483168,0.483663,+0.000495,64.119475,64.473975,+0.354500,hpc_rgssb,neutral,near neutral by AUC
+nfs_car,gaussian_noise_medium,gaussian_noise,medium,42,0.791089,0.807303,+0.016214,0.793995,0.810352,+0.016357,0.959901,0.961881,+0.001980,5.789128,6.109750,+0.320622,hpc_rgssb,neutral,near neutral by AUC
+nfs_dog,clean,clean,none,0,0.687984,0.672047,-0.015937,0.689819,0.673573,-0.016246,0.994175,0.996117,+0.001942,3.331066,3.329198,-0.001868,baseline,neutral,near neutral by AUC
+nfs_dog,motion_blur_medium,motion_blur,medium,42,0.653062,0.651322,-0.001740,0.654578,0.652801,-0.001777,0.970874,0.982524,+0.011650,6.196884,5.450175,-0.746709,baseline,neutral,near neutral by AUC
+nfs_dog,low_resolution_medium,low_resolution,medium,42,0.710189,0.690128,-0.020061,0.712331,0.691849,-0.020482,0.995146,0.994175,-0.000971,3.594547,3.465863,-0.128684,baseline,drop,OSTrack baseline improves AUC
+nfs_dog,gaussian_noise_medium,gaussian_noise,medium,42,0.665914,0.660098,-0.005816,0.667672,0.661620,-0.006052,0.988350,0.998058,+0.009708,3.715294,3.343938,-0.371356,baseline,neutral,near neutral by AUC
+nfs_running,clean,clean,none,0,0.620779,0.590008,-0.030771,0.621697,0.590563,-0.031134,0.967504,0.966027,-0.001477,7.212445,7.221322,+0.008877,baseline,drop,OSTrack baseline improves AUC
+nfs_running,motion_blur_medium,motion_blur,medium,42,0.636471,0.572707,-0.063764,0.637740,0.573131,-0.064609,0.967504,0.967504,+0.000000,8.304360,8.218209,-0.086151,baseline,drop,OSTrack baseline improves AUC
+nfs_running,low_resolution_medium,low_resolution,medium,42,0.653992,0.616889,-0.037103,0.655371,0.617774,-0.037597,0.966027,0.967504,+0.001477,7.170286,7.264540,+0.094254,baseline,drop,OSTrack baseline improves AUC
+nfs_running,gaussian_noise_medium,gaussian_noise,medium,42,0.604077,0.581204,-0.022873,0.604929,0.581741,-0.023188,0.967504,0.967504,+0.000000,7.375156,7.449711,+0.074555,baseline,drop,OSTrack baseline improves AUC
+nfs_bottle,clean,clean,none,0,0.849894,0.836104,-0.013790,0.853361,0.839467,-0.013894,0.760342,0.686638,-0.073704,22.105979,20.865688,-1.240291,baseline,neutral,near neutral by AUC
+nfs_bottle,motion_blur_medium,motion_blur,medium,42,0.849616,0.838425,-0.011191,0.853088,0.841764,-0.011324,0.766049,0.720875,-0.045174,26.724237,20.883579,-5.840658,baseline,neutral,near neutral by AUC
+nfs_bottle,low_resolution_medium,low_resolution,medium,42,0.850708,0.838133,-0.012575,0.854160,0.841557,-0.012603,0.768902,0.697575,-0.071327,18.702875,21.111644,+2.408769,baseline,neutral,near neutral by AUC
+nfs_bottle,gaussian_noise_medium,gaussian_noise,medium,42,0.792611,0.804104,+0.011493,0.795137,0.806887,+0.011750,0.685212,0.714218,+0.029006,56.833337,45.324405,-11.508932,hpc_rgssb,neutral,near neutral by AUC
+nfs_bird_2,clean,clean,none,0,0.704572,0.705009,+0.000437,0.706619,0.707359,+0.000740,0.815126,0.798319,-0.016807,13.284041,13.112984,-0.171057,hpc_rgssb,neutral,near neutral by AUC
+nfs_bird_2,motion_blur_medium,motion_blur,medium,42,0.738664,0.739496,+0.000832,0.740878,0.742033,+0.001155,0.907563,0.911765,+0.004202,9.857837,9.702875,-0.154962,hpc_rgssb,neutral,near neutral by AUC
+nfs_bird_2,low_resolution_medium,low_resolution,medium,42,0.713474,0.712434,-0.001040,0.715539,0.714492,-0.001047,0.842437,0.842437,+0.000000,12.222058,12.105743,-0.116315,baseline,neutral,near neutral by AUC
+nfs_bird_2,gaussian_noise_medium,gaussian_noise,medium,42,0.710604,0.711124,+0.000520,0.712795,0.713059,+0.000264,0.880252,0.863445,-0.016807,11.752498,12.119453,+0.366955,hpc_rgssb,neutral,near neutral by AUC
+nfs_walking,clean,clean,none,0,0.923165,0.920560,-0.002605,0.927564,0.924802,-0.002762,0.996396,0.996396,+0.000000,4.062831,4.062779,-0.000052,baseline,neutral,near neutral by AUC
+nfs_walking,motion_blur_medium,motion_blur,medium,42,0.923593,0.921095,-0.002498,0.927644,0.925383,-0.002261,1.000000,1.000000,+0.000000,4.157352,4.222859,+0.065507,baseline,neutral,near neutral by AUC
+nfs_walking,low_resolution_medium,low_resolution,medium,42,0.923379,0.921434,-0.001945,0.927651,0.925649,-0.002002,0.998198,1.000000,+0.001802,4.081696,4.011139,-0.070557,baseline,neutral,near neutral by AUC
+nfs_walking,gaussian_noise_medium,gaussian_noise,medium,42,0.923664,0.921524,-0.002140,0.927632,0.925719,-0.001913,1.000000,1.000000,+0.000000,4.181660,4.167717,-0.013943,baseline,neutral,near neutral by AUC

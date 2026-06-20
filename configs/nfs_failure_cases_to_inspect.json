@@ -2,7 +2,8 @@
   "benchmark": "nfs",
   "baseline_config": "vitb_256_mae_ce_32x4_ep300",
   "test_config": "vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_hpc_featcons_lam002",
-  "clean_nfs_root": "/speed-scratch/a_idrais/nfs",
+  "clean_nfs_root": "/speed-scratch/a_idrais/nfs_ostrack_normalized",
+  "local_clean_nfs_root": "/media/abdel/4484139E5D690B76/nfs_ostrack_normalized",
   "degraded_root_base": "/speed-scratch/a_idrais/Paper_2_Mamba_Tracking/datasets/tiny_sot/degraded",
   "results_csv": "experiments/baseline_results.csv",
   "comparison_csv": "experiments/rgssb_hpc_nfs_expanded32_comparison.csv",
@@ -13,89 +14,129 @@
   "frame_stride_for_visuals": 10,
   "cases": [
     {
-      "sequence": "nfs_cheetah",
+      "sequence": "nfs_bowling_1",
       "degradation": "low_resolution",
       "severity": "medium",
       "seed": 42,
-      "auc_change": -0.403866,
-      "selection_reason": "top_10_largest_auc_drop; required_known_failure"
+      "baseline_config": "vitb_256_mae_ce_32x4_ep300",
+      "rgssb_config": "vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_hpc_featcons_lam002",
+      "corrected_baseline_auc": 0.80296,
+      "corrected_rgssb_auc": 0.204882,
+      "corrected_auc_change": -0.598078,
+      "selection_reason": "top_10_largest_corrected_normalized_nfs_auc_drop"
     },
     {
-      "sequence": "nfs_walking",
+      "sequence": "nfs_Gymnastics",
+      "degradation": "low_resolution",
+      "severity": "medium",
+      "seed": 42,
+      "baseline_config": "vitb_256_mae_ce_32x4_ep300",
+      "rgssb_config": "vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_hpc_featcons_lam002",
+      "corrected_baseline_auc": 0.439706,
+      "corrected_rgssb_auc": 0.243946,
+      "corrected_auc_change": -0.19576,
+      "selection_reason": "top_10_largest_corrected_normalized_nfs_auc_drop"
+    },
+    {
+      "sequence": "nfs_Gymnastics",
       "degradation": "gaussian_noise",
       "severity": "medium",
       "seed": 42,
-      "auc_change": -0.284435,
-      "selection_reason": "top_10_largest_auc_drop; required_known_failure"
+      "baseline_config": "vitb_256_mae_ce_32x4_ep300",
+      "rgssb_config": "vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_hpc_featcons_lam002",
+      "corrected_baseline_auc": 0.457356,
+      "corrected_rgssb_auc": 0.289954,
+      "corrected_auc_change": -0.167402,
+      "selection_reason": "top_10_largest_corrected_normalized_nfs_auc_drop"
     },
     {
-      "sequence": "nfs_walking",
-      "degradation": "motion_blur",
+      "sequence": "nfs_basketball_player_2",
+      "degradation": "gaussian_noise",
       "severity": "medium",
       "seed": 42,
-      "auc_change": -0.165552,
-      "selection_reason": "top_10_largest_auc_drop; required_known_failure"
-    },
-    {
-      "sequence": "nfs_car_camaro",
-      "degradation": "low_resolution",
-      "severity": "medium",
-      "seed": 42,
-      "auc_change": -0.080859,
-      "selection_reason": "top_10_largest_auc_drop"
-    },
-    {
-      "sequence": "nfs_car_camaro",
-      "degradation": "motion_blur",
-      "severity": "medium",
-      "seed": 42,
-      "auc_change": -0.078933,
-      "selection_reason": "top_10_largest_auc_drop"
-    },
-    {
-      "sequence": "nfs_biker_acrobat",
-      "degradation": "motion_blur",
-      "severity": "medium",
-      "seed": 42,
-      "auc_change": -0.075263,
-      "selection_reason": "top_10_largest_auc_drop"
-    },
-    {
-      "sequence": "nfs_car_camaro",
-      "degradation": "clean",
-      "severity": "none",
-      "seed": 0,
-      "auc_change": -0.073983,
-      "selection_reason": "top_10_largest_auc_drop"
-    },
-    {
-      "sequence": "nfs_running_100_m",
-      "degradation": "motion_blur",
-      "severity": "medium",
-      "seed": 42,
-      "auc_change": -0.073735,
-      "selection_reason": "top_10_largest_auc_drop"
+      "baseline_config": "vitb_256_mae_ce_32x4_ep300",
+      "rgssb_config": "vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_hpc_featcons_lam002",
+      "corrected_baseline_auc": 0.747717,
+      "corrected_rgssb_auc": 0.621882,
+      "corrected_auc_change": -0.125835,
+      "selection_reason": "top_10_largest_corrected_normalized_nfs_auc_drop"
     },
     {
       "sequence": "nfs_parkour",
       "degradation": "low_resolution",
       "severity": "medium",
       "seed": 42,
-      "auc_change": -0.070502,
-      "selection_reason": "top_10_largest_auc_drop"
+      "baseline_config": "vitb_256_mae_ce_32x4_ep300",
+      "rgssb_config": "vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_hpc_featcons_lam002",
+      "corrected_baseline_auc": 0.678559,
+      "corrected_rgssb_auc": 0.563674,
+      "corrected_auc_change": -0.114885,
+      "selection_reason": "top_10_largest_corrected_normalized_nfs_auc_drop"
     },
     {
-      "sequence": "nfs_biker_acrobat",
+      "sequence": "nfs_motorcross",
       "degradation": "low_resolution",
       "severity": "medium",
       "seed": 42,
-      "auc_change": -0.064124,
-      "selection_reason": "top_10_largest_auc_drop"
+      "baseline_config": "vitb_256_mae_ce_32x4_ep300",
+      "rgssb_config": "vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_hpc_featcons_lam002",
+      "corrected_baseline_auc": 0.690023,
+      "corrected_rgssb_auc": 0.615638,
+      "corrected_auc_change": -0.074385,
+      "selection_reason": "top_10_largest_corrected_normalized_nfs_auc_drop"
+    },
+    {
+      "sequence": "nfs_running",
+      "degradation": "motion_blur",
+      "severity": "medium",
+      "seed": 42,
+      "baseline_config": "vitb_256_mae_ce_32x4_ep300",
+      "rgssb_config": "vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_hpc_featcons_lam002",
+      "corrected_baseline_auc": 0.636471,
+      "corrected_rgssb_auc": 0.572707,
+      "corrected_auc_change": -0.063764,
+      "selection_reason": "top_10_largest_corrected_normalized_nfs_auc_drop"
+    },
+    {
+      "sequence": "nfs_person_scooter",
+      "degradation": "motion_blur",
+      "severity": "medium",
+      "seed": 42,
+      "baseline_config": "vitb_256_mae_ce_32x4_ep300",
+      "rgssb_config": "vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_hpc_featcons_lam002",
+      "corrected_baseline_auc": 0.782849,
+      "corrected_rgssb_auc": 0.728766,
+      "corrected_auc_change": -0.054083,
+      "selection_reason": "top_10_largest_corrected_normalized_nfs_auc_drop"
+    },
+    {
+      "sequence": "nfs_footbal_skill",
+      "degradation": "low_resolution",
+      "severity": "medium",
+      "seed": 42,
+      "baseline_config": "vitb_256_mae_ce_32x4_ep300",
+      "rgssb_config": "vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_hpc_featcons_lam002",
+      "corrected_baseline_auc": 0.485375,
+      "corrected_rgssb_auc": 0.432394,
+      "corrected_auc_change": -0.052981,
+      "selection_reason": "top_10_largest_corrected_normalized_nfs_auc_drop"
+    },
+    {
+      "sequence": "nfs_car_rc_rolling",
+      "degradation": "clean",
+      "severity": "none",
+      "seed": 0,
+      "baseline_config": "vitb_256_mae_ce_32x4_ep300",
+      "rgssb_config": "vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_hpc_featcons_lam002",
+      "corrected_baseline_auc": 0.509422,
+      "corrected_rgssb_auc": 0.469179,
+      "corrected_auc_change": -0.040243,
+      "selection_reason": "top_10_largest_corrected_normalized_nfs_auc_drop"
     }
   ],
   "speed_paths": {
     "project_root": "/speed-scratch/a_idrais/Paper_2_Mamba_Tracking",
-    "clean_nfs_root": "/speed-scratch/a_idrais/nfs",
+    "clean_nfs_root": "/speed-scratch/a_idrais/nfs_ostrack_normalized",
     "degraded_root_base": "/speed-scratch/a_idrais/Paper_2_Mamba_Tracking/datasets/tiny_sot/degraded",
     "output_root": "/speed-scratch/a_idrais/Paper_2_Mamba_Tracking/outputs/failure_inspection"
   }
