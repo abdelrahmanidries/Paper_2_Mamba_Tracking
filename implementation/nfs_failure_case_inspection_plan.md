@@ -2,17 +2,17 @@
 
 ## Why this inspection is needed
 
-The expanded 32-sequence NFS analysis shows that the current HPC RG-SSB lambda `0.02` checkpoint is slightly negative overall on NFS. The average AUC change is `-0.010461`, with large sequence-condition drops concentrated in specific cases. Before changing training or architecture, the next step is per-frame inspection using existing result files and aligned NFS ground truth.
+This plan is superseded by the corrected normalized-NFS drift-onset workflow. The old failure ranking was based on invalid XYXY-as-XYWH NFS handling and must not be used for current claims. Use `configs/nfs_failure_cases_to_inspect.json` and `experiments/nfs_corrected_drift_onset_analysis.csv` for the corrected failure cases.
 
 This setup does not run training, does not run OSTrack evaluation, and does not modify `external/OSTrack` or datasets.
 
 ## Selected failure cases
 
-Cases were selected from `experiments/rgssb_hpc_nfs_expanded32_comparison.csv` by sorting AUC change ascending and taking the top 10 largest drops. Required known failures are included when present.
+The table below is retained only as historical context and is superseded.
 
 | rank | sequence | degradation | severity | seed | AUC change |
 | ---: | --- | --- | --- | ---: | ---: |
-| 1 | nfs_cheetah | low_resolution | medium | 42 | -0.403866 |
+| 1 | nfs_cheetah | low_resolution | medium | 42 | superseded |
 | 2 | nfs_walking | gaussian_noise | medium | 42 | -0.284435 |
 | 3 | nfs_walking | motion_blur | medium | 42 | -0.165552 |
 | 4 | nfs_car_camaro | low_resolution | medium | 42 | -0.080859 |

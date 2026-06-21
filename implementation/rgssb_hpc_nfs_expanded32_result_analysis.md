@@ -10,7 +10,7 @@ Corrected expanded-NFS average AUC change is `-0.009638` across `128` pairs. Bas
 
 - 32 sequences x 4 conditions = 128 corrected matched pairs.
 - The invalid historical archive contains 256 rows.
-- The old invalid `nfs_cheetah` low-resolution change `-0.403866` is not present in corrected outputs.
+- The old invalid `nfs_cheetah` low-resolution large-drop value is not present in corrected outputs.
 
 ## 3. Per-condition result
 
