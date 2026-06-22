@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import re
 import shutil
+import subprocess
 from pathlib import Path
 
 
@@ -116,6 +117,9 @@ def verify_citations(tex: str) -> None:
     missing = citation_keys(tex) - bib_keys()
     if missing:
         raise AssertionError(f"Citation keys missing from references.bib: {sorted(missing)}")
+    uncited = bib_keys() - citation_keys(tex)
+    if uncited:
+        raise AssertionError(f"Bibliography entries not cited in manuscript: {sorted(uncited)}")
 
 
 def verify_refs(tex: str) -> None:
@@ -151,7 +155,8 @@ def verify_placeholders(tex: str) -> None:
         if token in tex:
             raise AssertionError(f"Unresolved placeholder token found: {token}")
     citation_markers = len(re.findall(r"\\citationneeded\{[^}]+\}", tex))
-    print(f"Citation placeholders remaining: {citation_markers}")
+    if citation_markers:
+        raise AssertionError(f"Genuine citation placeholders remaining: {citation_markers}")
     author_review = read(PAPER / "AUTHOR_INFORMATION_REVIEW.md")
     if "REQUIRES CONFIRMATION" not in read(PAPER / "main.tex") or "Human confirmation required" not in author_review:
         raise AssertionError("Author information requiring confirmation is not listed")
@@ -183,9 +188,18 @@ def verify_build_log() -> None:
             return
         raise AssertionError("LaTeX tooling appears available but main.log is missing")
     text = read(log)
-    for needle in ["Undefined control sequence", "LaTeX Error", "Citation `", "Reference `"]:
+    for needle in ["Undefined control sequence", "LaTeX Error", "Citation `", "Reference `", "Overfull \\hbox", "Overfull \\vbox"]:
         if needle in text:
             raise AssertionError(f"Build log contains unresolved issue: {needle}")
+
+
+def pdf_page_count(pdf: Path) -> int:
+    require(pdf)
+    result = subprocess.run(["pdfinfo", str(pdf)], check=True, text=True, capture_output=True)
+    match = re.search(r"^Pages:\s+(\d+)$", result.stdout, re.MULTILINE)
+    if not match:
+        raise AssertionError("Could not read PDF page count with pdfinfo")
+    return int(match.group(1))
 
 
 def main() -> int:
@@ -197,11 +211,9 @@ def main() -> int:
     verify_placeholders(tex)
     verify_figures_and_tables_referenced(tex)
     verify_build_log()
-    pdf = PAPER / "main.pdf"
-    if pdf.exists():
-        print(f"PDF exists: {pdf}")
-    else:
-        print("PDF does not exist; LaTeX compilation was not available or did not complete.")
+    pages = pdf_page_count(PAPER / "main.pdf")
+    print(f"PDF exists: {PAPER / 'main.pdf'}")
+    print(f"PDF page count: {pages}")
     print("IEEE Transactions manuscript package verification passed.")
     return 0
 

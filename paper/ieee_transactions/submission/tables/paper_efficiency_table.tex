@@ -1,0 +1,14 @@
+\begin{table*}[t]
+\centering
+\caption{Controlled same-GPU efficiency comparison on Tesla V100-PCIE-32GB. FLOPs/MACs were unavailable and are not reported as measured.}
+\label{tab:efficiency}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lrrrrrrrrr}
+\toprule
+Model & Params & Trainable Params & Frozen Params & Init. ms & Latency ms & FPS & Peak Alloc. MB & Peak Reserved MB & FLOPs/MACs \\
+\midrule
+OSTrack baseline & 92,518,533 & 92,518,533 & 0 & 2.949 & 10.724 & 93.247 & 380.233 & 434.000 & Unavailable \\
+RG-SSB final & 94,598,469 & 8,554,053 & 86,044,416 & 3.165 & 11.525 & 86.766 & 388.917 & 434.000 & Unavailable \\
+\bottomrule
+\end{tabular}}
+\end{table*}

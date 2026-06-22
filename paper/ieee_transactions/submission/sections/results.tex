@@ -1,0 +1,63 @@
+\section{Results}
+
+\subsection{Main Benchmark Results}
+Table~\ref{tab:paper-freeze-benchmark} summarizes the benchmark-level results, and Fig.~\ref{fig:benchmark_auc_change} visualizes the same average AUC changes. The strongest result is on OTB, where \method{} improves average AUC by $+0.033144$ across 52 sequence-condition pairs. UAV123 is also positive, with $+0.017405$ average AUC over 64 pairs. Corrected NFS is the main weakness: the method decreases average AUC by $-0.009638$ over 128 pairs. The combined cross-benchmark aggregate is $+0.001478$, which is best described as near-neutral positive rather than consistent superiority.
+
+\input{tables/paper_main_benchmark_table}
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\linewidth]{benchmark_auc_change.pdf}
+    \caption{Benchmark-level AUC change for Paper Freeze V1. Positive values favor \method{}. The evaluated scope is selected OTB, expanded UAV123, corrected expanded NFS, and the cross-benchmark aggregate.}
+    \label{fig:benchmark_auc_change}
+\end{figure}
+
+\subsection{Condition-Level Results}
+Table~\ref{tab:conditions} and Fig.~\ref{fig:condition_auc_change} summarize condition-level behavior. The method is most consistently positive under motion blur. Low resolution remains the clearest condition-level weakness, with $-0.008275$ average AUC and increased center error.
+
+\input{tables/paper_condition_table}
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\linewidth]{condition_auc_change.pdf}
+    \caption{Condition-level AUC change across clean, motion blur, low resolution, and Gaussian noise. The low-resolution condition remains mixed/negative.}
+    \label{fig:condition_auc_change}
+\end{figure}
+
+\subsection{Ablation Studies}
+Table~\ref{tab:ablations} reports the final method-selection ablations, and Fig.~\ref{fig:ablation_decision} visualizes the decisions. Global feature consistency with $\lambda=0.02$ is retained. Response consistency, target-region feature consistency, and TDM are rejected. TDM is important negative evidence: it improves several local sequence-condition pairs, but its Gaussian-noise regression dominates the aggregate gate result. It is therefore not part of the frozen method.
+
+The final TDM gate decision is \texttt{REJECT\_AND\_ROLL\_BACK\_TO\_PAPER\_FREEZE\_V1}.
+
+\input{tables/paper_ablation_table}
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\linewidth]{ablation_decision.pdf}
+    \caption{Ablation decision summary. TDM is reported only as rejected negative evidence and is not part of Paper Freeze V1.}
+    \label{fig:ablation_decision}
+\end{figure}
+
+\subsection{Efficiency Analysis}
+Table~\ref{tab:efficiency} and Fig.~\ref{fig:efficiency_comparison} report the same-GPU controlled efficiency comparison. The measurement uses a Tesla V100-PCIE-32GB, the same Car1 clean sequence, 50 warm-up frames, 3 repetitions, synchronized CUDA timing, and separate initialization/per-frame tracking measurements. Historical timing files are not mixed with this controlled comparison.
+
+The final method adds 2,079,936 parameters over the baseline. FLOPs/MACs are unavailable and are not reported as measured.
+
+\input{tables/paper_efficiency_table}
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\linewidth]{efficiency_comparison.pdf}
+    \caption{Controlled V100 runtime comparison. The final method has a modest FPS reduction relative to the baseline and a small increase in peak allocated memory.}
+    \label{fig:efficiency_comparison}
+\end{figure}
+
+\subsection{Corrected NFS Failure Analysis}
+Figure~\ref{fig:nfs_failure_modes} summarizes terminal outcomes for 10 corrected NFS failure cases selected from the largest corrected drops. Persistent \method{}-specific target loss appears in 5 cases, sudden center jump in 3 cases, shared tracker failure in 1 case, and ambiguous behavior in 1 case. This is a qualitative failure-focused analysis, not a benchmark-wide frequency estimate.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\linewidth]{nfs_failure_mode_distribution.pdf}
+    \caption{Corrected NFS failure-mode distribution for 10 selected failure cases. Ground truth and diagnostics use corrected aligned XYWH annotations.}
+    \label{fig:nfs_failure_modes}
+\end{figure}

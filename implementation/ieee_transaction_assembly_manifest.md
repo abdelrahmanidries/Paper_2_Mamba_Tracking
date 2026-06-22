@@ -1,28 +1,6 @@
 # IEEE Transactions Assembly Manifest
 
-## Template Discovery
-
-Search locations:
-
-- `/home/abdel/Desktop`
-- `/home/abdel/Documents`
-- sibling directories of `/home/abdel/Desktop/Paper_2_Mamba_Tracking`
-
-Result: no local InvTrack IEEEtran manuscript root, `main.tex`, `bare_jrnl.tex`, `bare_jrnl_compsoc.tex`, or `IEEEtran.cls` was found. Only InvTrack code/training directories and the local `papers/InvTrack.pdf` evidence file were found.
-
-Selected InvTrack template root: not available.
-
-Main TeX file: not available.
-
-IEEEtran class/options used in assembled package:
-
-```tex
-\documentclass[journal]{IEEEtran}
-```
-
-The package relies on a TeX installation that provides IEEEtran. No InvTrack prose, figures, results, citations, or method claims were copied.
-
-## Created Package
+## Manuscript Root
 
 Root:
 
@@ -30,7 +8,15 @@ Root:
 paper/ieee_transactions/
 ```
 
-Files:
+Class:
+
+```tex
+\documentclass[journal]{IEEEtran}
+```
+
+The final source uses `IEEEtran` with local section, table, figure, and BibTeX files. The clean submission package also includes `IEEEtran.cls` and `IEEEtran.bst` for self-contained compilation.
+
+## Integrated Source Files
 
 - `main.tex`
 - `references.bib`
@@ -47,73 +33,87 @@ Files:
 - `tables/paper_condition_table.tex`
 - `tables/paper_ablation_table.tex`
 - `tables/paper_efficiency_table.tex`
-- `figures/*.pdf`
-- `figures/*.png`
-- `figures/*.svg`
-- `latexmkrc`
-- `Makefile`
-- `README.md`
-- `AUTHOR_INFORMATION_REVIEW.md`
-- `CITATION_RESOLUTION_REPORT.md`
+- `figures/benchmark_auc_change.pdf`
+- `figures/condition_auc_change.pdf`
+- `figures/efficiency_comparison.pdf`
+- `figures/ablation_decision.pdf`
+- `figures/nfs_failure_mode_distribution.pdf`
 
-## Citation Resolution
+## Citation Status
 
-Resolved locally:
+Resolved entries:
 
-- MambaIR from `paper_cards/2024_ECCV_MambaIR.md`.
-- MambaIRv2 from `paper_cards/2025_CVPR_MambaIRv2.md`.
-- InvTrack as local unpublished evidence because the local card reports title/authors but not year/venue.
+- OSTrack: `ye2022ostrack`
+- LaSOT: `fan2019lasot`
+- OTB: `wu2013otb`
+- UAV123: `mueller2016uav123`
+- NFS: `galoogahi2017nfs`
+- MambaIR: `guo2024mambair`
+- MambaIRv2: `guo2025mambairv2`
+- InvTrack local evidence: `invtrack_local`
 
-Unresolved and visibly marked:
+Unresolved citation placeholders: 0.
 
-- OSTrack.
-- LaSOT.
-- OTB.
-- UAV123.
-- NFS.
+## Author Status
 
-## Figures and Tables
+Candidate author names, order, affiliations, corresponding-author name, and funding text were copied from `papers/InvTrack.pdf`. `main.tex` retains an explicit `[AUTHOR INFORMATION REQUIRES CONFIRMATION]` note because ORCIDs, exact corresponding-author email punctuation, biographies, and final manuscript-author confirmation remain manual tasks.
 
-Integrated figures:
+## Build Outputs
 
-- `benchmark_auc_change.pdf`
-- `condition_auc_change.pdf`
-- `efficiency_comparison.pdf`
-- `ablation_decision.pdf`
-- `nfs_failure_mode_distribution.pdf`
+- Main PDF: `paper/ieee_transactions/main.pdf`
+- Main log: `paper/ieee_transactions/main.log`
+- Page count: 5
+- Rendered page audit: `paper/ieee_transactions/rendered_pages/`
+- Contact sheet: `paper/ieee_transactions/rendered_pages/contact_sheet.png`
 
-Integrated tables:
-
-- Main benchmark summary.
-- Condition-level summary.
-- Ablation summary.
-- Efficiency summary.
-
-No qualitative NFS panel was included because no corrected qualitative panel with confirmed aligned XYWH provenance was selected as a verified paper asset.
-
-## Build Status
-
-LaTeX tooling status in Codex environment:
-
-- `latexmk`: unavailable.
-- `pdflatex`: unavailable.
-- `kpsewhich`: unavailable.
-
-Therefore `main.pdf` could not be generated in this environment. The package includes `latexmkrc` and `Makefile` for a normal TeX installation.
-
-Expected build command:
+Build command executed:
 
 ```bash
 cd paper/ieee_transactions
+latexmk -C
 latexmk -pdf -interaction=nonstopmode -halt-on-error main.tex
 ```
 
-## Human Confirmation Required
+Final log scan found no undefined citations, undefined references, LaTeX errors, duplicate-label diagnostics, or overfull boxes.
 
-- Author names and order.
-- Affiliations.
-- ORCIDs.
-- Corresponding author.
-- Funding and acknowledgments.
-- Final bibliography entries for unresolved citation markers.
-- IEEE biography requirements.
+## Submission Package
+
+Source directory:
+
+```text
+paper/ieee_transactions/submission/
+```
+
+Source ZIP:
+
+```text
+paper/ieee_transactions/Paper_2_IEEE_Transactions_source.zip
+```
+
+ZIP size: 149,690 bytes.
+
+The ZIP contains 23 source files and excludes auxiliary files, logs, rendered pages, datasets, checkpoints, experiment outputs, and Git metadata. The submission directory was compiled independently and then cleaned back to source-only contents.
+
+## Verification
+
+Commands passed:
+
+```bash
+python3 -m py_compile scripts/verify_ieee_transaction_manuscript.py scripts/verify_ieee_submission_package.py
+python3 scripts/verify_ieee_transaction_manuscript.py
+python3 scripts/verify_ieee_submission_package.py
+```
+
+Claim anchors verified:
+
+- OTB `+0.033144`
+- UAV123 `+0.017405`
+- corrected NFS `-0.009638`
+- combined `+0.001478`
+- baseline parameters `92,518,533`
+- final parameters `94,598,469`
+- baseline FPS `93.247`
+- final FPS `86.766`
+- hardware `Tesla V100-PCIE-32GB`
+
+Unsupported C13/C14 claims remain absent. TDM appears only as a rejected negative ablation. FLOPs/MACs remain unavailable and are not reported as measured.

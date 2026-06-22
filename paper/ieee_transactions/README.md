@@ -1,27 +1,41 @@
 # IEEE Transactions Manuscript Package
 
-This directory contains the Paper Freeze V1 IEEE Transactions LaTeX source package.
+This directory contains the Paper Freeze V1 IEEE Transactions manuscript source.
 
 ## Build
 
-Preferred command:
-
 ```bash
+latexmk -C
 latexmk -pdf -interaction=nonstopmode -halt-on-error main.tex
 ```
 
-In this Codex environment, `latexmk`, `pdflatex`, and `kpsewhich` were unavailable, so compilation could not be executed locally.
+Generated output:
 
-## Template Provenance
+- `main.pdf`
+- `main.log`
 
-The requested local InvTrack IEEEtran manuscript template was searched under Desktop, Documents, and sibling project locations. No local IEEEtran manuscript root or `IEEEtran.cls` file was found. The source therefore uses:
+The final build completed successfully with 5 pages, no undefined citations, no undefined references, and no overfull boxes in the final log.
 
-```tex
-\documentclass[journal]{IEEEtran}
+## Source Package
+
+Clean submission source:
+
+```text
+submission/
 ```
 
-and relies on a TeX installation that provides IEEEtran.
+Source ZIP:
+
+```text
+Paper_2_IEEE_Transactions_source.zip
+```
+
+The submission package includes the TeX source, section files, table files, used PDF figures, `references.bib`, `IEEEtran.cls`, `IEEEtran.bst`, and a build README. It excludes auxiliary files, logs, rendered page PNGs, datasets, checkpoints, experiment outputs, and Git metadata.
 
 ## Citation Status
 
-Only local bibliographic metadata was used. Exact citations for OSTrack, LaSOT, OTB, UAV123, and NFS remain unresolved and are visibly marked in the manuscript.
+All genuine citation placeholders have been resolved. The bibliography contains 8 entries, and all 8 are cited.
+
+## Remaining Manual Author Check
+
+The author block uses candidate information copied from `papers/InvTrack.pdf` and is explicitly marked for confirmation in `main.tex`. ORCIDs, exact corresponding-author email punctuation, biographies, and final current-manuscript author confirmation remain unresolved.

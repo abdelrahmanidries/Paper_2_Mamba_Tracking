@@ -1,0 +1,16 @@
+\begin{table*}[t]
+\centering
+\caption{Ablation summary for Paper Freeze V1. Local ablations guide method selection and are not full benchmark claims.}
+\label{tab:ablations}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llllll}
+\toprule
+Ablation & Scope & Primary Comparison & Average AUC Change & Decision & Evidence \\
+\midrule
+Global feature consistency $\lambda=0.02$ & 3 OTB sequences $\times$ 4 conditions & vs. OSTrack baseline & +0.023480 & Kept & Lambda sweep CSV \\
+Response consistency & 3 OTB sequences $\times$ 4 conditions & vs. feature-only $\lambda=0.02$ & -0.019360 & Rejected & Response-consistency CSV \\
+Target-region feature consistency & 3 OTB sequences $\times$ 4 conditions & vs. global feature consistency & -0.023555 & Rejected & Target-vs-global CSV \\
+Target-vs-distractor margin & 3 OTB sequences $\times$ 4 conditions & vs. global feature consistency & -0.014549 & Rejected by gate & TDM gate CSV \\
+\bottomrule
+\end{tabular}}
+\end{table*}

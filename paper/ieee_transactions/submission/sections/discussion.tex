@@ -1,0 +1,7 @@
+\section{Discussion and Limitations}
+
+The evidence supports a narrow, defensible claim: restoration-guided state-space adaptation can improve selected robustness outcomes in RGB template-search tracking, especially on the tested OTB subset. UAV123 is positive but mixed, and corrected NFS is slightly negative. The result is therefore promising but not uniformly improved.
+
+The low-resolution weakness and corrected NFS failures are important limitations. They suggest that global feature consistency may not fully protect target identity under fast motion, high-frame-rate sampling behavior, or severe target/background ambiguity. The rejected TDM ablation further shows that adding a response-margin objective is not automatically beneficial; poorly balanced response constraints can introduce large condition-specific regressions.
+
+This paper version has several boundaries. The benchmark coverage uses selected subsets, not complete benchmark suites. Degradations are synthetic, medium severity, and use one seed. Training uses LaSOT only. The backbone remains frozen. FLOPs/MACs are unavailable. Corrected NFS required annotation normalization and rerunning NFS tracking; older NFS metrics and overlays are superseded. The evidence does not support state-of-the-art claims, universal degradation robustness, or uniform gains across all benchmarks.
