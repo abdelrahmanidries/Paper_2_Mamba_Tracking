@@ -1,0 +1,10 @@
+\section{Related Work}
+
+\subsection{Template-Search Object Tracking}
+\baseline{} is used as the base tracker in this study \citationneeded{OSTrack}. The current paper does not propose a new tracking framework, temporal memory module, response fusion module, or template-update mechanism. Instead, it evaluates whether a restoration-guided state-space feature block can be inserted into the existing template-search pipeline while keeping the backbone frozen.
+
+\subsection{Degradation-Robust Tracking}
+InvTrack studies degradation-invariant single-object tracking with clean/degraded branches, feature consistency, and response-map fusion~\cite{invtrack_local}. This is important prior evidence because it prevents overclaiming novelty for degradation-aware training alone. The present method differs by adapting a restoration-guided state-space block to tracking features rather than using the residual dense/low-pass residual design reported in the local InvTrack evidence card.
+
+\subsection{Restoration-Oriented Mamba Models}
+MambaIR adapts state-space modeling to image restoration through residual state-space blocks with local enhancement and channel attention~\cite{guo2024mambair}. MambaIRv2 further studies attentive state-space restoration and semantic guided neighboring~\cite{guo2025mambairv2}. These methods address image restoration rather than template-search tracking. Our method borrows the restoration-guided feature-adaptation motivation but optimizes for tracking localization rather than image reconstruction.

@@ -1,0 +1,19 @@
+\section{Experimental Setup}
+
+\subsection{Baseline and Final Configuration}
+The baseline is original \baseline{} config \texttt{vitb\_256\_mae\_ce\_32x4\_ep300}. The final method uses \finalconfig{}. All reported changes are computed as \method{} minus the \baseline{} baseline for the same sequence, degradation, severity, and seed.
+
+\subsection{Benchmarks and Degradation Conditions}
+The evaluated subsets are:
+\begin{itemize}
+    \item broader OTB: 13 sequences and 52 sequence-condition pairs \citationneeded{OTB};
+    \item expanded UAV123: 16 sequences and 64 pairs \citationneeded{UAV123};
+    \item corrected expanded NFS: 32 sequences and 128 pairs \citationneeded{NFS}.
+\end{itemize}
+Each sequence is evaluated under four conditions: clean, motion blur at medium severity, low resolution at medium severity, and Gaussian noise at medium severity. Degraded conditions use seed 42.
+
+\subsection{Metrics}
+The paper reports Success AUC, Precision@20, mean center error, model parameters, controlled FPS, per-frame latency, and peak allocated GPU memory. FLOPs/MACs are unavailable and are not reported as measured.
+
+\subsection{Corrected NFS Provenance}
+NFS required a correction before current results could be used. Raw NFS annotations were confirmed to contain XYXY coordinates, while the previous invalid path treated aligned rows as XYWH. The invalid NFS rows were archived, normalized aligned XYWH annotations were prepared, and NFS tracking was rerun. The current NFS metrics and failure analysis use only corrected normalized aligned XYWH annotations. Earlier NFS metrics and qualitative overlays are superseded.

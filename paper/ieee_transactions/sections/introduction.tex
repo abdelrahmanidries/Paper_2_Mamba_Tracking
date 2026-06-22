@@ -1,0 +1,14 @@
+\section{Introduction}
+
+RGB object tracking must maintain target localization under appearance change, motion, and image-quality degradation. Synthetic and real corruptions such as blur, low resolution, and Gaussian noise can weaken template-search matching, response-map localization, and bounding-box regression. Recent Mamba and state-space models have been explored in vision, while restoration-oriented variants such as MambaIR and MambaIRv2 adapt state-space modeling to image restoration~\cite{guo2024mambair,guo2025mambairv2}. This paper evaluates a narrower question: whether restoration-oriented state-space feature adaptation can improve target-discriminative tracking features without changing the overall \baseline{} tracking architecture.
+
+The goal is not to claim that Mamba is new to tracking, nor that degradation-robust tracking is unsolved. InvTrack is direct local evidence that degradation-invariant RGB tracking can be formulated through clean/degraded training, feature consistency, and response-map fusion~\cite{invtrack_local}. Instead, we study a specific missing intersection: restoration-oriented state-space feature adaptation inside RGB template-search tracking. The final method is intentionally conservative. It freezes the \baseline{} backbone, trains \method{} and the box head, and uses global clean--degraded feature consistency. This makes the empirical question testable while reducing the risk of conflating the proposed module with broad architecture changes.
+
+The contributions of this Paper Freeze V1 manuscript are:
+\begin{itemize}
+    \item a conservative \baseline{}+\method{} adaptation with frozen backbone and trainable \method{} plus box head;
+    \item an evaluation under clean, motion-blur, low-resolution, and Gaussian-noise conditions on selected OTB, UAV123, and corrected NFS subsets;
+    \item a corrected NFS provenance path that replaces invalid XYXY-as-XYWH NFS metrics with normalized aligned XYWH annotations;
+    \item a same-GPU efficiency and parameter comparison on Tesla V100-PCIE-32GB hardware;
+    \item a cautious claim boundary that reports positive OTB/UAV123 results, mixed corrected NFS transfer, and rejected negative ablations.
+\end{itemize}

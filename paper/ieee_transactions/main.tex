@@ -1,0 +1,49 @@
+\documentclass[journal]{IEEEtran}
+
+\usepackage[T1]{fontenc}
+\usepackage{cite}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage{url}
+\usepackage{xcolor}
+
+\graphicspath{{figures/}}
+
+\newcommand{\method}{RG-SSB}
+\newcommand{\baseline}{OSTrack}
+\newcommand{\finalconfig}{\texttt{vitb\_256\_mae\_ce\_32x4\_ep300\_rgssb\_head\_train\_lasot\_degraded\_hpc\_featcons\_lam002}}
+\newcommand{\citationneeded}[1]{\textcolor{red}{[CITATION NEEDED: #1]}}
+
+\title{Restoration-Guided State-Space Adaptation for Degradation-Robust RGB Object Tracking}
+
+\author{[AUTHOR INFORMATION REQUIRES CONFIRMATION]%
+\thanks{Author names, affiliations, ORCIDs, funding, and acknowledgments were not inferred. This block must be replaced with confirmed author information before submission.}}
+
+\markboth{IEEE Transactions Manuscript Draft, Paper Freeze V1}{Idrais \MakeLowercase{\textit{et al.}}: Restoration-Guided State-Space Adaptation}
+
+\begin{document}
+\maketitle
+
+\input{sections/abstract}
+
+\begin{IEEEkeywords}
+Visual object tracking, degradation robustness, state-space models, Mamba, feature consistency, RGB tracking.
+\end{IEEEkeywords}
+
+\input{sections/introduction}
+\input{sections/related_work}
+\input{sections/method}
+\input{sections/experiments}
+\input{sections/results}
+\input{sections/discussion}
+\input{sections/conclusion}
+\input{sections/appendix}
+
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}

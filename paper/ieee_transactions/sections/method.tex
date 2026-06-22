@@ -1,0 +1,23 @@
+\section{Proposed Method}
+
+\subsection{Overview}
+The final method uses \baseline{} as the base tracker. Given a template image and a search image, \baseline{} extracts transformer features and predicts a response map and bounding box. Paper Freeze V1 adds a Restoration-Guided State-Space Block (\method{}) after the backbone search features and before the tracking head. The module is designed to adjust tracking features under degradation rather than reconstruct RGB images.
+
+The frozen method is:
+\begin{itemize}
+    \item base tracker: \baseline{};
+    \item added module: \method{};
+    \item frozen parameters: backbone;
+    \item trainable parameters: \texttt{rgssb.*} and \texttt{box\_head.*};
+    \item training data: degradation-aware LaSOT \citationneeded{LaSOT};
+    \item feature consistency: global clean--degraded feature consistency;
+    \item feature-consistency weight: $\lambda=0.02$;
+    \item disabled components: response consistency, target-region feature consistency, target-versus-distractor margin loss, degradation tokens, memory update, response fusion, and template-guided scan.
+\end{itemize}
+
+\subsection{Training Objective}
+The training objective combines the degraded-branch tracking loss with global clean--degraded feature consistency:
+\begin{equation}
+    \mathcal{L} = \mathcal{L}_{\mathrm{track}}(X_d) + 0.02\,\mathcal{L}_{\mathrm{feat}}(F_c, F_d),
+\end{equation}
+where $X_d$ is the degraded search branch, and $F_c$ and $F_d$ are clean and degraded post-\method{} search features. The clean feature branch is detached in the consistency term. The final method intentionally keeps the response-consistency, target-region feature-consistency, and target-versus-distractor margin (TDM) objectives disabled.
