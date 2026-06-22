@@ -1,0 +1,13 @@
+sequence,condition,degradation,severity,seed,global_featcons_lam002_auc,tdm_auc,tdm_minus_global_auc_change,global_precision_20,tdm_precision_20,precision_20_change,global_mean_center_error,tdm_mean_center_error,center_error_change,best_model,note
+Car1,clean,clean,none,0,0.583557,0.646573,+0.063016,0.746078,0.832353,+0.086275,16.424854,11.526093,-4.898761,tdm,TDM improves AUC
+Car1,motion_blur_medium,motion_blur,medium,42,0.167084,0.187711,+0.020627,0.196078,0.239216,+0.043138,82.399231,73.483826,-8.915405,tdm,TDM improves AUC
+Car1,low_resolution_medium,low_resolution,medium,42,0.231528,0.233440,+0.001912,0.284314,0.293137,+0.008823,53.292439,57.790356,+4.497917,tdm,TDM improves AUC
+Car1,gaussian_noise_medium,gaussian_noise,medium,42,0.465211,0.222646,-0.242565,0.613725,0.273529,-0.340196,25.541130,59.523560,+33.982430,global_featcons_lam002,dominant Gaussian-noise regression
+David2,clean,clean,none,0,0.786880,0.782086,-0.004794,1.000000,1.000000,+0.000000,1.653213,1.664165,+0.010952,global_featcons_lam002,TDM drops AUC
+David2,motion_blur_medium,motion_blur,medium,42,0.538931,0.545458,+0.006527,0.945996,0.942272,-0.003724,8.545233,8.325691,-0.219542,tdm,TDM improves AUC
+David2,low_resolution_medium,low_resolution,medium,42,0.792485,0.789922,-0.002563,1.000000,1.000000,+0.000000,1.599949,1.620804,+0.020855,global_featcons_lam002,TDM drops AUC
+David2,gaussian_noise_medium,gaussian_noise,medium,42,0.768110,0.768442,+0.000332,0.975791,0.979516,+0.003725,3.085201,2.899291,-0.185910,tdm,TDM improves AUC
+Coke,clean,clean,none,0,0.768671,0.741724,-0.026947,0.955326,0.917526,-0.037800,6.295847,17.235678,+10.939831,global_featcons_lam002,TDM drops AUC
+Coke,motion_blur_medium,motion_blur,medium,42,0.727366,0.728863,+0.001497,0.934708,0.938144,+0.003436,7.894889,7.896343,+0.001454,tdm,TDM improves AUC
+Coke,low_resolution_medium,low_resolution,medium,42,0.760777,0.764928,+0.004151,0.951890,0.948454,-0.003436,6.767758,6.565948,-0.201810,tdm,TDM improves AUC
+Coke,gaussian_noise_medium,gaussian_noise,medium,42,0.765711,0.769930,+0.004219,0.938144,0.951890,+0.013746,6.455208,6.252352,-0.202856,tdm,TDM improves AUC

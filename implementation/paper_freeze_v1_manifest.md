@@ -79,6 +79,7 @@ Completed or analyzed ablations include:
 - Feature consistency lambda sweep: `0.02`, `0.05`, `0.10`.
 - Feature consistency + response consistency.
 - Target-region feature consistency.
+- Target-versus-distractor margin loss.
 - HPC-scale lambda `0.02` global feature-consistency setup.
 
 ## 6. Rejected Ablations
@@ -87,6 +88,7 @@ Rejected for Paper Freeze V1:
 
 - Response consistency: not retained after local comparison.
 - Target-region feature consistency: not retained after local comparison.
+- Target-versus-distractor margin loss: rejected by the final local gate. It improved clean, motion-blur, and low-resolution averages locally, but failed the required local-average gate because Gaussian-noise regression dominated the aggregate (`-0.014549` overall difference versus global lambda `0.02`).
 - Balanced clean/degraded training: not selected over current global feature-consistency setup.
 - New architecture modules: postponed.
 
@@ -98,6 +100,7 @@ Current table assets:
 - `experiments/paper_level_benchmark_summary.csv`
 - `experiments/paper_claim_traceability.csv`
 - `experiments/nfs_corrected_drift_onset_analysis.csv`
+- `experiments/rgssb_tdm_gate_comparison.csv`
 
 Missing figure assets:
 
@@ -136,6 +139,8 @@ Paper Freeze V1 supports a cautious proof-of-concept paper position:
 
 This is the fallback position if the final gated distractor-aware ablation fails.
 
+The final gated target-versus-distractor margin ablation did fail the local promotion gate and is rejected. Paper Freeze V1 is therefore the active frozen paper version.
+
 ## 11. Evidence Status
 
 Final/current evidence:
@@ -150,6 +155,7 @@ Provisional evidence:
 
 - Local small-scale ablation rankings.
 - Corrected qualitative drift interpretation until final figures are selected.
+- Rejected TDM gate evidence in `experiments/rgssb_tdm_gate_comparison.csv` and `implementation/rgssb_tdm_ablation_result_analysis.md`.
 
 Superseded evidence:
 
