@@ -1,0 +1,3 @@
+Model,GPU,Params,Trainable Params,Frozen Params,Init ms,Latency ms,FPS,Peak Alloc MB,Peak Reserved MB,FLOPs/MACs
+OSTrack baseline,Tesla V100-PCIE-32GB,92518533,92518533,0,2.949,10.724,93.247,380.233,434.000,unavailable
+RG-SSB final,Tesla V100-PCIE-32GB,94598469,8554053,86044416,3.165,11.525,86.766,388.917,434.000,unavailable

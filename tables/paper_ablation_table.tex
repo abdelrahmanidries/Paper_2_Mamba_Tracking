@@ -1,0 +1,15 @@
+\begin{table}[t]
+\centering
+\caption{Ablation summary for Paper Freeze V1.}
+\label{tab:ablations}
+\begin{tabular}{llllll}
+\toprule
+Ablation & Scope & Primary Comparison & Average AUC Change & Decision & Evidence \\
+\midrule
+Global feature consistency lambda 0.02 & 3 OTB sequences x 4 conditions & vs OSTrack baseline & +0.023480 & kept for Paper Freeze V1 & experiments/rgssb\_featcons\_lambda\_sweep\_comparison.csv \\
+Response consistency & 3 OTB sequences x 4 conditions & vs feature-only lambda 0.02 & -0.019360 & rejected & experiments/rgssb\_featcons\_lam002\_vs\_respcons\_comparison.csv \\
+Target-region feature consistency & 3 OTB sequences x 4 conditions & vs global feature consistency lambda 0.02 & -0.023555 & rejected & experiments/rgssb\_target\_vs\_global\_featcons\_comparison.csv \\
+Target-vs-distractor margin & 3 OTB sequences x 4 conditions & vs global feature consistency lambda 0.02 & -0.014549 & rejected by gate & experiments/rgssb\_tdm\_gate\_comparison.csv \\
+\bottomrule
+\end{tabular}
+\end{table}

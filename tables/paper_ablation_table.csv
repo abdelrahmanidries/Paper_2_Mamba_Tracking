@@ -1,0 +1,5 @@
+Ablation,Scope,Primary Comparison,Average AUC Change,Decision,Evidence
+Global feature consistency lambda 0.02,3 OTB sequences x 4 conditions,vs OSTrack baseline,+0.023480,kept for Paper Freeze V1,experiments/rgssb_featcons_lambda_sweep_comparison.csv
+Response consistency,3 OTB sequences x 4 conditions,vs feature-only lambda 0.02,-0.019360,rejected,experiments/rgssb_featcons_lam002_vs_respcons_comparison.csv
+Target-region feature consistency,3 OTB sequences x 4 conditions,vs global feature consistency lambda 0.02,-0.023555,rejected,experiments/rgssb_target_vs_global_featcons_comparison.csv
+Target-vs-distractor margin,3 OTB sequences x 4 conditions,vs global feature consistency lambda 0.02,-0.014549,rejected by gate,experiments/rgssb_tdm_gate_comparison.csv

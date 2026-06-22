@@ -1,0 +1,5 @@
+Condition,Pairs,Baseline AUC,RG-SSB AUC,AUC Change,Precision Change,Center Error Change,Conclusion
+Clean,61,0.685280,0.690648,+0.005368,+0.015220,+2.558046,improves on average
+Motion blur,61,0.643687,0.663299,+0.019612,+0.029967,-7.502857,improves on average
+Low resolution,61,0.672450,0.664175,-0.008275,-0.003989,+6.769353,mixed / negative
+Gaussian noise,61,0.672042,0.681627,+0.009585,+0.018540,-0.342091,improves on average
