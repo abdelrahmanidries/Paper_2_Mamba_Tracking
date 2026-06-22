@@ -9,7 +9,9 @@ import importlib
 import json
 import os
 import statistics
+import subprocess
 import sys
+import tempfile
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -150,6 +152,30 @@ def load_json(path: Path) -> dict:
         return json.load(f)
 
 
+def model_specs(bench_cfg: dict) -> List[Tuple[str, dict]]:
+    return [("baseline", bench_cfg["baseline"]), ("final_method", bench_cfg["final_method"])]
+
+
+def checkpoint_path(project_root: Path, model_spec: dict) -> Path:
+    return (project_root / model_spec["checkpoint"]).resolve()
+
+
+def config_yaml_path(project_root: Path, bench_cfg: dict, model_spec: dict) -> Path:
+    return (
+        project_root
+        / bench_cfg["ostrack_root"]
+        / "experiments"
+        / "ostrack"
+        / f"{model_spec['config']}.yaml"
+    ).resolve()
+
+
+def worker_python_command() -> List[str]:
+    if os.environ.get("CONDA_DEFAULT_ENV") == "ostrack":
+        return [sys.executable]
+    return ["conda", "run", "-n", "ostrack", "python"]
+
+
 def parse_gt(path: Path) -> List[List[float]]:
     rows: List[List[float]] = []
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -194,7 +220,117 @@ def reset_ostrack_config_modules() -> None:
             importlib.reload(sys.modules[name])
 
 
-def load_tracker(ostrack_root: Path, config_name: str):
+def count_params_by_prefix(model, prefix: str) -> int:
+    return sum(p.numel() for name, p in model.named_parameters() if name.startswith(prefix))
+
+
+def validate_model_static_provenance(
+    project_root: Path,
+    bench_cfg: dict,
+    model_key: str,
+    *,
+    actual_epoch: int,
+    actual_rgssb_enabled: bool,
+    total_params: int,
+    rgssb_params: int,
+    has_active_rgssb: bool,
+    require_checkpoint: bool,
+) -> Dict[str, object]:
+    model_spec = bench_cfg[model_key]
+    config_path = config_yaml_path(project_root, bench_cfg, model_spec)
+    explicit_checkpoint = checkpoint_path(project_root, model_spec)
+    checkpoint_exists = explicit_checkpoint.exists()
+
+    if require_checkpoint and not checkpoint_exists:
+        raise FileNotFoundError(f"Missing explicit checkpoint: {explicit_checkpoint}")
+    if actual_epoch != int(model_spec["expected_test_epoch"]):
+        raise RuntimeError(
+            f"{model_spec['config']} TEST.EPOCH mismatch: "
+            f"expected {model_spec['expected_test_epoch']}, got {actual_epoch}"
+        )
+    if actual_rgssb_enabled != bool(model_spec["expected_rgssb_enabled"]):
+        raise RuntimeError(
+            f"{model_spec['config']} RGSSB enabled mismatch: "
+            f"expected {model_spec['expected_rgssb_enabled']}, got {actual_rgssb_enabled}"
+        )
+
+    expected_total = int(model_spec["expected_total_params"])
+    if total_params != expected_total:
+        raise RuntimeError(
+            f"{model_spec['config']} parameter-count mismatch: expected {expected_total}, got {total_params}"
+        )
+    if bool(model_spec["expected_rgssb_enabled"]):
+        if not has_active_rgssb:
+            raise RuntimeError(f"{model_spec['config']} expected an active rgssb module, but none was built")
+        if rgssb_params != 2079936:
+            raise RuntimeError(f"{model_spec['config']} RG-SSB parameter mismatch: expected 2079936, got {rgssb_params}")
+        if "ep0300" in explicit_checkpoint.name:
+            raise RuntimeError(f"{model_spec['config']} resolved to an invalid final checkpoint: {explicit_checkpoint}")
+    else:
+        if has_active_rgssb or rgssb_params != 0:
+            raise RuntimeError(f"{model_spec['config']} baseline unexpectedly built RG-SSB parameters")
+
+    return {
+        "model_key": model_key,
+        "model_label": model_spec["model_label"],
+        "config": model_spec["config"],
+        "config_yaml": str(config_path),
+        "test_epoch": actual_epoch,
+        "expected_test_epoch": int(model_spec["expected_test_epoch"]),
+        "rgssb_enabled": actual_rgssb_enabled,
+        "expected_rgssb_enabled": bool(model_spec["expected_rgssb_enabled"]),
+        "checkpoint": str(explicit_checkpoint),
+        "checkpoint_exists": checkpoint_exists,
+        "total_params": total_params,
+        "expected_total_params": expected_total,
+        "rgssb_params": rgssb_params,
+        "provenance_valid": True,
+    }
+
+
+def validate_model_provenance(
+    project_root: Path,
+    bench_cfg: dict,
+    model_key: str,
+    *,
+    require_checkpoint: bool,
+) -> Dict[str, object]:
+    model_spec = bench_cfg[model_key]
+    ostrack_root = (project_root / bench_cfg["ostrack_root"]).resolve()
+    config_path = config_yaml_path(project_root, bench_cfg, model_spec)
+    if not config_path.exists():
+        raise FileNotFoundError(f"Missing OSTrack config YAML: {config_path}")
+
+    if str(ostrack_root) not in sys.path:
+        sys.path.insert(0, str(ostrack_root))
+
+    with pushd(ostrack_root):
+        reset_ostrack_config_modules()
+        from lib.config.ostrack.config import cfg, update_config_from_file
+        from lib.models.ostrack import build_ostrack
+
+        update_config_from_file(str(config_path))
+        actual_epoch = int(cfg.TEST.EPOCH)
+        actual_rgssb_enabled = bool(getattr(getattr(cfg.MODEL, "RGSSB", None), "ENABLE", False))
+        model = build_ostrack(cfg, training=False)
+        total_params = sum(p.numel() for p in model.parameters())
+        rgssb_params = count_params_by_prefix(model, "rgssb")
+        has_active_rgssb = bool(getattr(model, "rgssb", None) is not None)
+
+    return validate_model_static_provenance(
+        project_root,
+        bench_cfg,
+        model_key,
+        actual_epoch=actual_epoch,
+        actual_rgssb_enabled=actual_rgssb_enabled,
+        total_params=total_params,
+        rgssb_params=rgssb_params,
+        has_active_rgssb=has_active_rgssb,
+        require_checkpoint=require_checkpoint,
+    )
+
+
+def load_tracker(ostrack_root: Path, model_spec: dict, explicit_checkpoint: Path):
     if str(ostrack_root) not in sys.path:
         sys.path.insert(0, str(ostrack_root))
     with pushd(ostrack_root):
@@ -202,10 +338,18 @@ def load_tracker(ostrack_root: Path, config_name: str):
         from lib.test.parameter.ostrack import parameters
         from lib.test.tracker.ostrack import OSTrack
 
-        params = parameters(config_name)
+        params = parameters(model_spec["config"])
         params.debug = 0
-        if not Path(params.checkpoint).exists():
-            raise FileNotFoundError(f"Missing checkpoint for runtime benchmark: {params.checkpoint}")
+        inferred_checkpoint = Path(params.checkpoint)
+        params.checkpoint = str(explicit_checkpoint)
+        if not explicit_checkpoint.exists():
+            raise FileNotFoundError(f"Missing explicit checkpoint for runtime benchmark: {explicit_checkpoint}")
+        if int(params.cfg.TEST.EPOCH) != int(model_spec["expected_test_epoch"]):
+            raise RuntimeError(
+                f"Tracker parameter TEST.EPOCH mismatch for {model_spec['config']}: "
+                f"expected {model_spec['expected_test_epoch']}, got {params.cfg.TEST.EPOCH}; "
+                f"inferred checkpoint was {inferred_checkpoint}"
+            )
         return OSTrack(params, dataset_name="otb"), params.checkpoint
 
 
@@ -228,7 +372,8 @@ def benchmark_model(
     if cuda_resolution.device is None or cuda_resolution.logical_index is None:
         raise RuntimeError("CUDA device was not resolved for the controlled benchmark.")
 
-    tracker, checkpoint = load_tracker(ostrack_root, model_spec["config"])
+    explicit_checkpoint = checkpoint_path(project_root, model_spec)
+    tracker, checkpoint = load_tracker(ostrack_root, model_spec, explicit_checkpoint)
     gpu_name = cuda_resolution.gpu_name
     device = cuda_resolution.device
     logical_index = cuda_resolution.logical_index
@@ -343,6 +488,123 @@ def write_rows(path: Path, rows: List[Dict[str, object]]) -> None:
             writer.writerow({col: row.get(col, "") for col in CSV_COLUMNS})
 
 
+def append_rows_atomically(path: Path, rows: List[Dict[str, object]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    existing = path.read_text(encoding="utf-8") if path.exists() else ""
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    try:
+        with tmp_path.open("w", newline="", encoding="utf-8") as f:
+            if existing:
+                f.write(existing)
+                if not existing.endswith("\n"):
+                    f.write("\n")
+                writer = csv.DictWriter(f, fieldnames=CSV_COLUMNS)
+            else:
+                writer = csv.DictWriter(f, fieldnames=CSV_COLUMNS)
+                writer.writeheader()
+            for row in rows:
+                writer.writerow({col: row.get(col, "") for col in CSV_COLUMNS})
+        tmp_path.replace(path)
+    finally:
+        if tmp_path.exists():
+            tmp_path.unlink()
+
+
+def run_worker(
+    project_root: Path,
+    args,
+    *,
+    model_key: str,
+    mode: str,
+    output_path: Path,
+) -> None:
+    cmd = [
+        *worker_python_command(),
+        str(project_root / "scripts" / "benchmark_ostrack_efficiency.py"),
+        "--benchmark_config",
+        args.benchmark_config,
+        "--_worker_mode",
+        mode,
+        "--_worker_model_key",
+        model_key,
+        "--_worker_output",
+        str(output_path),
+    ]
+    if args.otb_root:
+        cmd.extend(["--otb_root", args.otb_root])
+    if args.sequence:
+        cmd.extend(["--sequence", args.sequence])
+    if args.warmup_frames is not None:
+        cmd.extend(["--warmup_frames", str(args.warmup_frames)])
+    if args.repetitions is not None:
+        cmd.extend(["--repetitions", str(args.repetitions)])
+    completed = subprocess.run(cmd, cwd=project_root, check=False)
+    if completed.returncode != 0:
+        raise RuntimeError(f"{mode} worker failed for {model_key} with exit code {completed.returncode}")
+
+
+def load_worker_output(path: Path) -> dict:
+    with path.open("r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def run_check_workers(project_root: Path, bench_cfg: dict, args) -> List[dict]:
+    outputs: List[dict] = []
+    with tempfile.TemporaryDirectory(prefix="paper_efficiency_check_") as tmp:
+        tmp_dir = Path(tmp)
+        for model_key, _ in model_specs(bench_cfg):
+            output = tmp_dir / f"{model_key}.json"
+            run_worker(project_root, args, model_key=model_key, mode="check_model", output_path=output)
+            outputs.append(load_worker_output(output))
+    return outputs
+
+
+def run_benchmark_workers(project_root: Path, bench_cfg: dict, args) -> List[Dict[str, object]]:
+    all_rows: List[Dict[str, object]] = []
+    with tempfile.TemporaryDirectory(prefix="paper_efficiency_runtime_") as tmp:
+        tmp_dir = Path(tmp)
+        for model_key, _ in model_specs(bench_cfg):
+            output = tmp_dir / f"{model_key}.json"
+            run_worker(project_root, args, model_key=model_key, mode="benchmark_model", output_path=output)
+            worker_result = load_worker_output(output)
+            all_rows.extend(worker_result["rows"])
+    return all_rows
+
+
+def worker_check_model(project_root: Path, bench_cfg: dict, model_key: str, output_path: Path) -> int:
+    provenance = validate_model_provenance(project_root, bench_cfg, model_key, require_checkpoint=False)
+    output_path.write_text(json.dumps(provenance, indent=2, sort_keys=True), encoding="utf-8")
+    return 0
+
+
+def worker_benchmark_model(project_root: Path, bench_cfg: dict, args) -> int:
+    model_key = args._worker_model_key
+    provenance = validate_model_provenance(project_root, bench_cfg, model_key, require_checkpoint=True)
+    cuda_resolution = resolve_cuda_device(require_cuda=True)
+    otb_root = Path(args.otb_root or bench_cfg["otb_root"])
+    sequence = args.sequence or bench_cfg["sequence"]
+    warmup = int(args.warmup_frames or bench_cfg["warmup_frames"])
+    repetitions = int(args.repetitions or bench_cfg["repetitions"])
+    frame_paths, gt = sequence_paths(otb_root, sequence)
+    frames = read_rgb_frames(frame_paths)
+    rows = benchmark_model(
+        project_root,
+        (project_root / bench_cfg["ostrack_root"]).resolve(),
+        bench_cfg[model_key],
+        frames,
+        gt,
+        sequence,
+        warmup,
+        repetitions,
+        cuda_resolution,
+    )
+    args._worker_output.write_text(
+        json.dumps({"provenance": provenance, "rows": rows}, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    return 0
+
+
 def check_only(project_root: Path, bench_cfg: dict, args) -> int:
     ostrack_root = project_root / bench_cfg["ostrack_root"]
     otb_root = Path(args.otb_root or bench_cfg["otb_root"])
@@ -353,9 +615,24 @@ def check_only(project_root: Path, bench_cfg: dict, args) -> int:
     print(f"Sequence: {sequence}, frames={len(frames)}, gt={len(gt)}")
     print(f"Warm-up frames: {args.warmup_frames or bench_cfg['warmup_frames']}")
     print(f"Repetitions: {args.repetitions or bench_cfg['repetitions']}")
-    for spec in [bench_cfg["baseline"], bench_cfg["final_method"]]:
-        cfg_path = ostrack_root / "experiments" / "ostrack" / f"{spec['config']}.yaml"
-        print(f"Config exists: {cfg_path.exists()} {cfg_path}")
+    provenance_rows = run_check_workers(project_root, bench_cfg, args)
+    for row in provenance_rows:
+        print("")
+        print(f"Model: {row['model_label']}")
+        print(f"  config: {row['config']}")
+        print(f"  config YAML: {row['config_yaml']}")
+        print(f"  TEST.EPOCH: {row['test_epoch']}")
+        print(f"  RGSSB enabled: {row['rgssb_enabled']}")
+        print(f"  checkpoint: {row['checkpoint']}")
+        print(f"  checkpoint exists: {row['checkpoint_exists']}")
+        print(f"  total parameters: {row['total_params']}")
+        print(f"  expected parameters: {row['expected_total_params']}")
+        print(f"  RG-SSB parameters: {row['rgssb_params']}")
+        print(f"  provenance validation result: {row['provenance_valid']}")
+    if provenance_rows[0]["total_params"] == provenance_rows[1]["total_params"]:
+        raise RuntimeError("Baseline and final method resolved to the same parameter count; provenance isolation failed.")
+    if provenance_rows[0]["rgssb_enabled"] == provenance_rows[1]["rgssb_enabled"]:
+        raise RuntimeError("Baseline and final method resolved to the same RGSSB state; provenance isolation failed.")
     cuda_resolution = resolve_cuda_device(require_cuda=False)
     print(f"CUDA available for real benchmark: {torch.cuda.is_available()}")
     print(f"CUDA_VISIBLE_DEVICES: {cuda_resolution.cuda_visible_devices}")
@@ -378,6 +655,9 @@ def main() -> int:
     parser.add_argument("--repetitions", type=int, default=None)
     parser.add_argument("--output_csv", default=None)
     parser.add_argument("--check_only", action="store_true")
+    parser.add_argument("--_worker_mode", choices=["check_model", "benchmark_model"], default=None)
+    parser.add_argument("--_worker_model_key", choices=["baseline", "final_method"], default=None)
+    parser.add_argument("--_worker_output", type=Path, default=None)
     args = parser.parse_args()
 
     project_root = Path.cwd()
@@ -387,35 +667,20 @@ def main() -> int:
     if args.test_config:
         bench_cfg["final_method"]["config"] = args.test_config
 
+    if args._worker_mode:
+        if args._worker_model_key is None or args._worker_output is None:
+            raise RuntimeError("Worker mode requires --_worker_model_key and --_worker_output")
+        if args._worker_mode == "check_model":
+            return worker_check_model(project_root, bench_cfg, args._worker_model_key, args._worker_output)
+        if args._worker_mode == "benchmark_model":
+            return worker_benchmark_model(project_root, bench_cfg, args)
+
     if args.check_only:
         return check_only(project_root, bench_cfg, args)
 
-    ostrack_root = (project_root / bench_cfg["ostrack_root"]).resolve()
-    otb_root = Path(args.otb_root or bench_cfg["otb_root"])
-    sequence = args.sequence or bench_cfg["sequence"]
-    warmup = int(args.warmup_frames or bench_cfg["warmup_frames"])
-    repetitions = int(args.repetitions or bench_cfg["repetitions"])
     output_csv = project_root / (args.output_csv or bench_cfg["output_csv"])
-
-    frame_paths, gt = sequence_paths(otb_root, sequence)
-    frames = read_rgb_frames(frame_paths)
-    cuda_resolution = resolve_cuda_device(require_cuda=True)
-    all_rows: List[Dict[str, object]] = []
-    for spec in [bench_cfg["baseline"], bench_cfg["final_method"]]:
-        all_rows.extend(
-            benchmark_model(
-                project_root,
-                ostrack_root,
-                spec,
-                frames,
-                gt,
-                sequence,
-                warmup,
-                repetitions,
-                cuda_resolution,
-            )
-        )
-    write_rows(output_csv, all_rows)
+    all_rows = run_benchmark_workers(project_root, bench_cfg, args)
+    append_rows_atomically(output_csv, all_rows)
     print(f"Wrote controlled benchmark rows: {output_csv}")
     return 0
 

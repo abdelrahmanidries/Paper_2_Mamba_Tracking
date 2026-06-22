@@ -8,6 +8,7 @@ import csv
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Dict, Iterable, List
 
 
@@ -117,9 +118,17 @@ def main() -> int:
     timing_rows = audit_time_files(project_root / Path(root) for root in cfg.get("historical_time_roots", []))
     if str(project_root / "scripts") not in sys.path:
         sys.path.insert(0, str(project_root / "scripts"))
-    from benchmark_ostrack_efficiency import resolve_cuda_device
+    from benchmark_ostrack_efficiency import resolve_cuda_device, run_check_workers
 
     cuda_resolution = resolve_cuda_device(require_cuda=False)
+    worker_args = SimpleNamespace(
+        benchmark_config=args.benchmark_config,
+        otb_root=None,
+        sequence=None,
+        warmup_frames=None,
+        repetitions=None,
+    )
+    provenance_rows = run_check_workers(project_root, cfg, worker_args)
 
     print("Efficiency benchmark setup verified.")
     print(f"Result table: {output_csv}")
@@ -129,6 +138,17 @@ def main() -> int:
     print(f"Logical CUDA device count: {cuda_resolution.device_count}")
     print(f"Selected logical CUDA index: {cuda_resolution.logical_index}")
     print(f"GPU name: {cuda_resolution.gpu_name}")
+    for row in provenance_rows:
+        print("")
+        print(f"Model: {row['model_label']}")
+        print(f"  config: {row['config']}")
+        print(f"  TEST.EPOCH: {row['test_epoch']}")
+        print(f"  RGSSB enabled: {row['rgssb_enabled']}")
+        print(f"  checkpoint: {row['checkpoint']}")
+        print(f"  checkpoint exists: {row['checkpoint_exists']}")
+        print(f"  total parameters: {row['total_params']}")
+        print(f"  expected parameters: {row['expected_total_params']}")
+        print(f"  provenance validation result: {row['provenance_valid']}")
     print(f"Historical timing files found: {len(timing_rows)}")
     if timing_rows:
         sample = timing_rows[:5]

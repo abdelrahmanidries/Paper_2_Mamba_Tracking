@@ -5,11 +5,19 @@
   "baseline": {
     "model_label": "OSTrack baseline",
     "config": "vitb_256_mae_ce_32x4_ep300",
+    "checkpoint": "external/OSTrack/output/checkpoints/train/ostrack/vitb_256_mae_ce_32x4_ep300/OSTrack_ep0300.pth.tar",
+    "expected_test_epoch": 300,
+    "expected_rgssb_enabled": false,
+    "expected_total_params": 92518533,
     "freeze_mode": "none"
   },
   "final_method": {
     "model_label": "RG-SSB + head, global feature consistency lambda 0.02",
     "config": "vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_hpc_featcons_lam002",
+    "checkpoint": "external/OSTrack/output/checkpoints/train/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_hpc_featcons_lam002/OSTrack_ep0010.pth.tar",
+    "expected_test_epoch": 10,
+    "expected_rgssb_enabled": true,
+    "expected_total_params": 94598469,
     "freeze_mode": "rgssb_head"
   },
   "otb_root": "/media/abdel/4484139E5D690B76/otb",

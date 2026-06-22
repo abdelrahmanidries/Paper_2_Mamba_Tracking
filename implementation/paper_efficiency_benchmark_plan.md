@@ -32,6 +32,28 @@ Default runtime protocol:
 
 The runtime command writes to `experiments/paper_efficiency_results.csv`.
 
+## Model Configuration Isolation
+
+OSTrack uses a mutable global configuration object, so the benchmark must not load the baseline and RG-SSB configs sequentially inside the same model process. The benchmark parent process launches one fresh worker process for the baseline and one fresh worker process for the final method. Each worker imports OSTrack, loads exactly one YAML config, validates provenance, constructs one tracker, and returns structured rows to the parent.
+
+The parent writes runtime rows only after both workers complete successfully. If either worker fails, `experiments/paper_efficiency_results.csv` is left unchanged, preserving valid complexity rows and preventing partial runtime results from entering the paper table.
+
+Each model entry in `configs/paper_efficiency_benchmark.json` now includes explicit provenance:
+
+- config name
+- explicit checkpoint path
+- expected `TEST.EPOCH`
+- expected RG-SSB enabled state
+- expected total parameter count
+
+The final method must resolve to:
+
+```text
+external/OSTrack/output/checkpoints/train/ostrack/vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_hpc_featcons_lam002/OSTrack_ep0010.pth.tar
+```
+
+It must not resolve to `OSTrack_ep0300.pth.tar`; that would indicate stale baseline config state leaked into the final-method load.
+
 ## CUDA Device Resolution For Slurm And MIG
 
 The runtime benchmark resolves one PyTorch logical CUDA device before either tracker is constructed. This matters on Slurm systems and MIG-enabled A100 nodes because `CUDA_VISIBLE_DEVICES` may contain a physical GPU id, a remapped id, or a MIG UUID. The script never treats those values as PyTorch device indices. It selects logical CUDA device `0` inside the process-visible namespace, calls `torch.cuda.set_device(0)`, validates `torch.cuda.device_count()`, and verifies `torch.cuda.get_device_properties(0)` before benchmarking.
