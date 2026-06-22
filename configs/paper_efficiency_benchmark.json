@@ -1,0 +1,27 @@
+{
+  "benchmark_name": "paper_freeze_v1_efficiency",
+  "ostrack_root": "external/OSTrack",
+  "tracker": "ostrack",
+  "baseline": {
+    "model_label": "OSTrack baseline",
+    "config": "vitb_256_mae_ce_32x4_ep300",
+    "freeze_mode": "none"
+  },
+  "final_method": {
+    "model_label": "RG-SSB + head, global feature consistency lambda 0.02",
+    "config": "vitb_256_mae_ce_32x4_ep300_rgssb_head_train_lasot_degraded_hpc_featcons_lam002",
+    "freeze_mode": "rgssb_head"
+  },
+  "otb_root": "/media/abdel/4484139E5D690B76/otb",
+  "speed_otb_root": "/speed-scratch/a_idrais/otb",
+  "sequence": "Car1",
+  "template_size": 128,
+  "search_size": 256,
+  "warmup_frames": 50,
+  "repetitions": 3,
+  "output_csv": "experiments/paper_efficiency_results.csv",
+  "historical_time_roots": [
+    "outputs",
+    "external/OSTrack/output"
+  ]
+}
