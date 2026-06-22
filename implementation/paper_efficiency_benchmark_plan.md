@@ -32,6 +32,21 @@ Default runtime protocol:
 
 The runtime command writes to `experiments/paper_efficiency_results.csv`.
 
+## CUDA Device Resolution For Slurm And MIG
+
+The runtime benchmark resolves one PyTorch logical CUDA device before either tracker is constructed. This matters on Slurm systems and MIG-enabled A100 nodes because `CUDA_VISIBLE_DEVICES` may contain a physical GPU id, a remapped id, or a MIG UUID. The script never treats those values as PyTorch device indices. It selects logical CUDA device `0` inside the process-visible namespace, calls `torch.cuda.set_device(0)`, validates `torch.cuda.device_count()`, and verifies `torch.cuda.get_device_properties(0)` before benchmarking.
+
+Check-only mode prints:
+
+- `CUDA_VISIBLE_DEVICES`
+- `SLURM_LOCALID`
+- `SLURM_GPUS_ON_NODE`
+- logical CUDA device count
+- selected logical index
+- GPU name
+
+If CUDA reports available but PyTorch cannot expose a usable logical device, check-only fails before any timed benchmark is attempted. This prevents invalid-device failures such as calling `torch.cuda.current_device()` under a stale Slurm/MIG mapping.
+
 ## Complexity Method
 
 `scripts/collect_ostrack_complexity.py` builds both models from their OSTrack YAML configs and records:

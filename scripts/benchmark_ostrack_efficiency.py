@@ -12,9 +12,10 @@ import statistics
 import sys
 import time
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Sequence, Tuple
+from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
 import cv2
 import numpy as np
@@ -50,6 +51,88 @@ CSV_COLUMNS = [
     "provenance",
     "notes",
 ]
+
+
+@dataclass(frozen=True)
+class CudaDeviceResolution:
+    device: Optional[torch.device]
+    logical_index: Optional[int]
+    gpu_name: str
+    device_count: int
+    cuda_visible_devices: str
+    slurm_localid: str
+    slurm_gpus_on_node: str
+
+
+def resolve_cuda_device(
+    requested_index: int = 0,
+    *,
+    require_cuda: bool = True,
+    torch_module=torch,
+    env: Optional[Mapping[str, str]] = None,
+) -> CudaDeviceResolution:
+    """Resolve a PyTorch logical CUDA device for Slurm/MIG-safe benchmarking.
+
+    CUDA_VISIBLE_DEVICES may contain physical ids, remapped ids, or MIG UUIDs.
+    PyTorch exposes only the process-visible logical namespace, so this function
+    deliberately selects logical index 0 by default and never interprets the
+    CUDA_VISIBLE_DEVICES token as a PyTorch device index.
+    """
+    env = env or os.environ
+    cuda_visible = env.get("CUDA_VISIBLE_DEVICES", "")
+    slurm_localid = env.get("SLURM_LOCALID", "")
+    slurm_gpus = env.get("SLURM_GPUS_ON_NODE", "")
+
+    if not torch_module.cuda.is_available():
+        if require_cuda:
+            raise RuntimeError(
+                "CUDA is unavailable; controlled GPU efficiency benchmark requires a CUDA device. "
+                f"CUDA_VISIBLE_DEVICES={cuda_visible!r}"
+            )
+        return CudaDeviceResolution(
+            device=None,
+            logical_index=None,
+            gpu_name="cuda_unavailable",
+            device_count=0,
+            cuda_visible_devices=cuda_visible,
+            slurm_localid=slurm_localid,
+            slurm_gpus_on_node=slurm_gpus,
+        )
+
+    device_count = int(torch_module.cuda.device_count())
+    if device_count <= 0:
+        raise RuntimeError(
+            "CUDA reports available but PyTorch sees zero usable logical devices. "
+            f"CUDA_VISIBLE_DEVICES={cuda_visible!r}; SLURM_LOCALID={slurm_localid!r}; "
+            f"SLURM_GPUS_ON_NODE={slurm_gpus!r}"
+        )
+    if requested_index < 0 or requested_index >= device_count:
+        raise RuntimeError(
+            f"Requested logical CUDA device {requested_index} is invalid for "
+            f"device_count={device_count}. CUDA_VISIBLE_DEVICES={cuda_visible!r}"
+        )
+
+    try:
+        torch_module.cuda.set_device(requested_index)
+        device = torch_module.device("cuda", requested_index)
+        props = torch_module.cuda.get_device_properties(requested_index)
+    except Exception as exc:  # pragma: no cover - exercised through mocked tests
+        raise RuntimeError(
+            f"Could not initialize logical CUDA device {requested_index}. "
+            f"device_count={device_count}; CUDA_VISIBLE_DEVICES={cuda_visible!r}; "
+            f"SLURM_LOCALID={slurm_localid!r}; SLURM_GPUS_ON_NODE={slurm_gpus!r}"
+        ) from exc
+
+    gpu_name = getattr(props, "name", None) or str(props)
+    return CudaDeviceResolution(
+        device=device,
+        logical_index=requested_index,
+        gpu_name=gpu_name,
+        device_count=device_count,
+        cuda_visible_devices=cuda_visible,
+        slurm_localid=slurm_localid,
+        slurm_gpus_on_node=slurm_gpus,
+    )
 
 
 @contextmanager
@@ -126,9 +209,9 @@ def load_tracker(ostrack_root: Path, config_name: str):
         return OSTrack(params, dataset_name="otb"), params.checkpoint
 
 
-def synchronize() -> None:
+def synchronize(device: torch.device) -> None:
     if torch.cuda.is_available():
-        torch.cuda.synchronize()
+        torch.cuda.synchronize(device)
 
 
 def benchmark_model(
@@ -140,24 +223,27 @@ def benchmark_model(
     sequence: str,
     warmup_frames: int,
     repetitions: int,
+    cuda_resolution: CudaDeviceResolution,
 ) -> List[Dict[str, object]]:
-    if not torch.cuda.is_available():
-        raise RuntimeError("CUDA is unavailable; controlled GPU efficiency benchmark cannot run.")
+    if cuda_resolution.device is None or cuda_resolution.logical_index is None:
+        raise RuntimeError("CUDA device was not resolved for the controlled benchmark.")
 
     tracker, checkpoint = load_tracker(ostrack_root, model_spec["config"])
-    gpu_name = torch.cuda.get_device_name(torch.cuda.current_device())
+    gpu_name = cuda_resolution.gpu_name
+    device = cuda_resolution.device
+    logical_index = cuda_resolution.logical_index
     measured_start = min(max(1, warmup_frames + 1), len(frames) - 1)
     rows: List[Dict[str, object]] = []
 
     for rep in range(1, repetitions + 1):
         torch.cuda.empty_cache()
-        torch.cuda.reset_peak_memory_stats()
+        torch.cuda.reset_peak_memory_stats(logical_index)
 
-        synchronize()
+        synchronize(device)
         init_start = time.perf_counter()
         with torch.inference_mode():
             tracker.initialize(frames[0], {"init_bbox": gt[0]})
-        synchronize()
+        synchronize(device)
         init_ms = (time.perf_counter() - init_start) * 1000.0
 
         with torch.inference_mode():
@@ -167,10 +253,10 @@ def benchmark_model(
         latencies: List[float] = []
         with torch.inference_mode():
             for idx in range(measured_start, len(frames)):
-                synchronize()
+                synchronize(device)
                 start = time.perf_counter()
                 tracker.track(frames[idx], {})
-                synchronize()
+                synchronize(device)
                 latencies.append((time.perf_counter() - start) * 1000.0)
 
         if not latencies:
@@ -195,10 +281,14 @@ def benchmark_model(
                 "median_latency_ms": f"{statistics.median(latencies):.6f}",
                 "latency_std_ms": f"{std_ms:.6f}",
                 "fps": f"{1000.0 / mean_ms:.6f}",
-                "peak_allocated_memory_mb": f"{torch.cuda.max_memory_allocated() / (1024 * 1024):.6f}",
-                "peak_reserved_memory_mb": f"{torch.cuda.max_memory_reserved() / (1024 * 1024):.6f}",
+                "peak_allocated_memory_mb": f"{torch.cuda.max_memory_allocated(logical_index) / (1024 * 1024):.6f}",
+                "peak_reserved_memory_mb": f"{torch.cuda.max_memory_reserved(logical_index) / (1024 * 1024):.6f}",
                 "provenance": "controlled_same_gpu_runtime",
-                "notes": f"checkpoint={checkpoint}; timestamp={datetime.now(timezone.utc).isoformat()}",
+                "notes": (
+                    f"checkpoint={checkpoint}; logical_cuda_device={logical_index}; "
+                    f"CUDA_VISIBLE_DEVICES={cuda_resolution.cuda_visible_devices}; "
+                    f"timestamp={datetime.now(timezone.utc).isoformat()}"
+                ),
             }
         )
 
@@ -266,7 +356,14 @@ def check_only(project_root: Path, bench_cfg: dict, args) -> int:
     for spec in [bench_cfg["baseline"], bench_cfg["final_method"]]:
         cfg_path = ostrack_root / "experiments" / "ostrack" / f"{spec['config']}.yaml"
         print(f"Config exists: {cfg_path.exists()} {cfg_path}")
+    cuda_resolution = resolve_cuda_device(require_cuda=False)
     print(f"CUDA available for real benchmark: {torch.cuda.is_available()}")
+    print(f"CUDA_VISIBLE_DEVICES: {cuda_resolution.cuda_visible_devices}")
+    print(f"SLURM_LOCALID: {cuda_resolution.slurm_localid}")
+    print(f"SLURM_GPUS_ON_NODE: {cuda_resolution.slurm_gpus_on_node}")
+    print(f"Logical CUDA device count: {cuda_resolution.device_count}")
+    print(f"Selected logical CUDA index: {cuda_resolution.logical_index}")
+    print(f"GPU name: {cuda_resolution.gpu_name}")
     return 0
 
 
@@ -302,9 +399,22 @@ def main() -> int:
 
     frame_paths, gt = sequence_paths(otb_root, sequence)
     frames = read_rgb_frames(frame_paths)
+    cuda_resolution = resolve_cuda_device(require_cuda=True)
     all_rows: List[Dict[str, object]] = []
     for spec in [bench_cfg["baseline"], bench_cfg["final_method"]]:
-        all_rows.extend(benchmark_model(project_root, ostrack_root, spec, frames, gt, sequence, warmup, repetitions))
+        all_rows.extend(
+            benchmark_model(
+                project_root,
+                ostrack_root,
+                spec,
+                frames,
+                gt,
+                sequence,
+                warmup,
+                repetitions,
+                cuda_resolution,
+            )
+        )
     write_rows(output_csv, all_rows)
     print(f"Wrote controlled benchmark rows: {output_csv}")
     return 0

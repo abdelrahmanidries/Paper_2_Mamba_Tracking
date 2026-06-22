@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import sys
 from pathlib import Path
 from typing import Dict, Iterable, List
 
@@ -114,9 +115,20 @@ def main() -> int:
 
     validate_csv(output_csv)
     timing_rows = audit_time_files(project_root / Path(root) for root in cfg.get("historical_time_roots", []))
+    if str(project_root / "scripts") not in sys.path:
+        sys.path.insert(0, str(project_root / "scripts"))
+    from benchmark_ostrack_efficiency import resolve_cuda_device
+
+    cuda_resolution = resolve_cuda_device(require_cuda=False)
 
     print("Efficiency benchmark setup verified.")
     print(f"Result table: {output_csv}")
+    print(f"CUDA_VISIBLE_DEVICES: {cuda_resolution.cuda_visible_devices}")
+    print(f"SLURM_LOCALID: {cuda_resolution.slurm_localid}")
+    print(f"SLURM_GPUS_ON_NODE: {cuda_resolution.slurm_gpus_on_node}")
+    print(f"Logical CUDA device count: {cuda_resolution.device_count}")
+    print(f"Selected logical CUDA index: {cuda_resolution.logical_index}")
+    print(f"GPU name: {cuda_resolution.gpu_name}")
     print(f"Historical timing files found: {len(timing_rows)}")
     if timing_rows:
         sample = timing_rows[:5]
