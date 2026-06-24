@@ -38,3 +38,17 @@ datasets/tiny_sot/annotations/*
 
 datasets/tiny_sot/README_assets/*
 !datasets/tiny_sot/README_assets/.gitkeep
+# IEEE LaTeX build artifacts
+paper/ieee_transactions/**/*.aux
+paper/ieee_transactions/**/*.bbl
+paper/ieee_transactions/**/*.blg
+paper/ieee_transactions/**/*.fdb_latexmk
+paper/ieee_transactions/**/*.fls
+paper/ieee_transactions/**/*.log
+paper/ieee_transactions/**/*.out
+paper/ieee_transactions/**/*.synctex.gz
+paper/ieee_transactions/rendered_pages/
+paper/ieee_transactions/submission/main.pdf
+
+# Local supervisor-paper corpus: PDFs and extracted full text
+papers/supervisor_style_corpus/
