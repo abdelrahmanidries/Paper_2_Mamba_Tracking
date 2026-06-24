@@ -1,0 +1,31 @@
+request_id: intro_from_scratch_template
+mode: WRITE_FROM_SCRATCH
+section_type: introduction
+task: "Draft an Introduction from supplied evidence for an IEEE-style visual tracking manuscript."
+constraints:
+  do_not_modify_active_manuscript: true
+  do_not_download_papers: true
+  do_not_copy_corpus_passages: true
+  preserve_scientific_meaning: true
+style_profile:
+  primary: agents/omair_swamy_writing/STYLE_PROFILE.md
+  playbook: agents/omair_swamy_writing/section_playbooks/introduction.md
+evidence:
+  - id: E1
+    source: "Replace with paper card, matrix, or experiment file path."
+    claim: "Replace with evidence-supported claim."
+    citation: "\\cite{replace_key}"
+    evidence_status: supported
+draft_requirements:
+  target_words: 900
+  paragraph_roles:
+    - application/task importance
+    - degradation or robustness challenge
+    - prior progress by method family
+    - missing intersection
+    - method preview
+    - contributions
+output:
+  destination: "stdout_or_standalone_draft"
+  include_revision_report: true
+  include_audits: true

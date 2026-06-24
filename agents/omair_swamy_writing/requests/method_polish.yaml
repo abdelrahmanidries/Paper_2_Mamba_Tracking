@@ -1,0 +1,31 @@
+request_id: method_polish_template
+mode: POLISH
+section_type: method
+task: "Polish a Methods section for clarity, flow, and IEEE tone while preserving all technical content."
+constraints:
+  do_not_modify_active_manuscript: true
+  do_not_download_papers: true
+  do_not_copy_corpus_passages: true
+  preserve_scientific_meaning: true
+input_text:
+  path: "replace_with_methods_section.md"
+style_profile:
+  primary: agents/omair_swamy_writing/STYLE_PROFILE.md
+  playbook: agents/omair_swamy_writing/section_playbooks/method.md
+evidence:
+  - id: E1
+    source: "Replace with method notes or manuscript excerpt."
+    claim: "Replace with module/function claim."
+    citation: "not_applicable"
+    evidence_status: supported
+polish_requirements:
+  preserve:
+    - equations
+    - symbols
+    - hyperparameters
+    - architecture_names
+    - numerical_values
+output:
+  destination: "stdout_or_standalone_polish"
+  include_revision_report: true
+  include_audits: true

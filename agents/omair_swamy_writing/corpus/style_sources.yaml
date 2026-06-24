@@ -1,0 +1,31 @@
+style_sources:
+  - path: implementation/supervisor_style_high_confidence_core.md
+    role: high_confidence_core
+  - path: implementation/supervisor_style_consistency_audit.md
+    role: authorship_consistency_audit
+  - path: implementation/ahmad_swamy_ieee_writing_style_guide.md
+    role: style_guide
+  - path: implementation/introduction_related_work_revision_blueprint.md
+    role: introduction_related_work_blueprint
+  - path: experiments/supervisor_style_authorship_structure.csv
+    role: authorship_structure_metadata
+  - path: experiments/supervisor_style_group_summary.csv
+    role: group_similarity_summary
+  - path: experiments/supervisor_style_features.csv
+    role: style_feature_metadata
+  - path: experiments/supervisor_style_corpus_verified_manifest.csv
+    role: verified_manifest
+  - path: scripts/check_supervisor_corpus_phrase_overlap.py
+    role: phrase_overlap_reference_script
+weights:
+  alireza_centered_core: 1.00
+  tchebichef_and_alzheimer: 0.75
+  rgbt_tracking_style: 0.45
+  rgbt_tracking_technical_organization: 1.00
+  other_group_c_max: 0.25
+  group_d: 0.00
+policy:
+  copy_corpus_passages: false
+  package_pdfs: false
+  package_extracted_text: false
+  download_papers: false

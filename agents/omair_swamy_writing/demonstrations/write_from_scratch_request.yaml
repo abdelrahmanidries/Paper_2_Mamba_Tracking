@@ -1,0 +1,24 @@
+request_id: demo_write_from_scratch
+mode: WRITE_FROM_SCRATCH
+section_type: introduction
+task: "Draft a short Introduction for a fictional paper on calibration-aware thermal crop monitoring."
+constraints:
+  do_not_modify_active_manuscript: true
+  do_not_download_papers: true
+  do_not_copy_corpus_passages: true
+  preserve_scientific_meaning: true
+evidence:
+  - id: E1
+    source: "fictional_demo_notes.md"
+    claim: "Field thermal cameras drift under daily temperature changes."
+    citation: "\\cite{demoThermalDrift2026}"
+    evidence_status: supported
+  - id: E2
+    source: "fictional_demo_notes.md"
+    claim: "Calibration tokens reduce drift on the supplied fictional validation split."
+    citation: "\\cite{demoCalibrationTokens2026}"
+    evidence_status: supported
+output:
+  destination: "agents/omair_swamy_writing/demonstrations/write_from_scratch_output.md"
+  include_revision_report: true
+  include_audits: true

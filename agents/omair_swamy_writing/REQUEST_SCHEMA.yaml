@@ -1,0 +1,43 @@
+schema_version: 1
+required_fields:
+  - request_id
+  - mode
+  - section_type
+  - task
+  - constraints
+  - evidence
+  - output
+allowed_modes:
+  - WRITE_FROM_SCRATCH
+  - REWRITE
+  - PLAN
+  - CRITIQUE
+  - SHORTEN
+  - EXPAND
+  - POLISH
+  - RELATED_WORK_SYNTHESIS
+  - REVIEWER_RESPONSE
+allowed_section_types:
+  - abstract
+  - introduction
+  - related_work
+  - method
+  - experiments
+  - results
+  - discussion
+  - conclusion
+  - reviewer_response
+constraints_required:
+  - do_not_modify_active_manuscript
+  - do_not_download_papers
+  - do_not_copy_corpus_passages
+evidence_item_fields:
+  - id
+  - source
+  - claim
+  - citation
+  - evidence_status
+output_fields:
+  - destination
+  - include_revision_report
+  - include_audits

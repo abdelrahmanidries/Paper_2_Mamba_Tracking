@@ -1,0 +1,27 @@
+request_id: reviewer_response_template
+mode: REVIEWER_RESPONSE
+section_type: reviewer_response
+task: "Draft a reviewer response with manuscript-change summary."
+constraints:
+  do_not_modify_active_manuscript: true
+  do_not_download_papers: true
+  do_not_copy_corpus_passages: true
+  preserve_scientific_meaning: true
+reviewer_comment:
+  id: R1
+  text: "Replace with reviewer comment."
+evidence:
+  - id: E1
+    source: "Replace with experiment, table, citation, or revised-text path."
+    claim: "Replace with response support."
+    citation: "replace_if_needed"
+    evidence_status: supported
+response_requirements:
+  include:
+    - response_to_reviewer
+    - manuscript_change_summary
+    - verification
+output:
+  destination: "stdout_or_standalone_response"
+  include_revision_report: true
+  include_audits: true

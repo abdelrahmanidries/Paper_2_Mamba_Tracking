@@ -1,0 +1,32 @@
+request_id: related_work_rewrite_template
+mode: REWRITE
+section_type: related_work
+task: "Rewrite an existing Related Work section without changing scientific meaning."
+constraints:
+  do_not_modify_active_manuscript: true
+  do_not_download_papers: true
+  do_not_copy_corpus_passages: true
+  preserve_scientific_meaning: true
+input_text:
+  path: "replace_with_section_text_file.md"
+style_profile:
+  primary: agents/omair_swamy_writing/STYLE_PROFILE.md
+  playbook: agents/omair_swamy_writing/section_playbooks/related_work.md
+evidence:
+  - id: E1
+    source: "Replace with evidence matrix or paper card."
+    claim: "Replace with claim to preserve."
+    citation: "\\cite{replace_key}"
+    evidence_status: supported
+rewrite_requirements:
+  preserve:
+    - citations
+    - equations
+    - numerical_values
+    - dataset_names
+    - claims
+  report_major_changes: true
+output:
+  destination: "stdout_or_standalone_rewrite"
+  include_revision_report: true
+  include_audits: true
