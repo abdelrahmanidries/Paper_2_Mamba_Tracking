@@ -2,37 +2,37 @@
 
 ## Summary
 
-All genuine `[CITATION REQUIRED: ...]` placeholders in the rewritten IEEE Transactions Introduction and Related Work were replaced. New citations were selected only when technically relevant to the sentence being supported. Supervisor-corpus papers were not cited for style-only reasons.
+The IEEE Transactions Introduction and Related Work now use a broader but bounded set of tracking, state-space, Mamba tracking, restoration, and degraded-observation citations. The expansion keeps the approved claim boundaries: no state-of-the-art claim by the present method, no universal robustness claim, no claim that Mamba has not been used in tracking, and no claim that low-light or degradation-aware tracking is absent.
 
-## Placeholder Resolution Table
+## Subsection-Level Related Work Map
 
-| ID | Exact sentence | Claim type | Required source category | Selected citation(s) | BibTeX key(s) | Verification source |
-|---|---|---|---|---|---|---|
-| P1 | State-space models and Mamba-based vision modules have recently attracted attention because they provide a mechanism for structured long-range feature modeling with favorable computational properties. | State-space/vision foundation | State-space and Mamba foundations; visual Mamba/state-space models | Gu and Dao 2024; Zhu et al. 2024; Liu et al. 2024 | `gu2024mamba`; `zhu2024visionmamba`; `liu2024vmamba` | arXiv:2312.00752; arXiv:2401.09417; arXiv:2401.10166 |
-| P2 | In visual tracking, reported Mamba-based designs use state-space modules for purposes such as long-term context modeling, multimodal feature interaction, nonlinear motion prediction, dynamic template generation, or nighttime template-search representation learning. | Technical positioning | Mamba-based tracking | Li et al. 2024; Huang et al. 2024; Xiao et al. 2024; Wang et al. 2024; Wu et al. 2024 | `li2024mambalct`; `huang2024mambafetrack`; `xiao2024mambatrack`; `wang2024mambaevt`; `wu2024mambanut` | arXiv records plus local paper cards |
-| P3 | Modern RGB trackers have increasingly used transformer-based feature interaction to relate the initial target template to the search region. | Tracking method family | Transformer-based visual tracking | Chen et al. 2021; Yan et al. 2021 | `chen2021transt`; `yan2021stark` | arXiv:2103.15436; arXiv:2103.17154 |
-| P4 | One-stream tracking further simplifies this formulation by learning template-search relations in a unified stream rather than maintaining separate feature extraction and matching stages. | Tracking method family | One-stream/template-search tracking | Cui et al. 2022; Ye et al. 2022 | `cui2022mixformer`; `ye2022ostrack` | arXiv:2203.11082; existing OSTrack bibliography entry |
-| P5 | Robust tracking under degraded observations has been studied from several viewpoints, including low-light benchmark construction, nighttime UAV tracking, degradation-aware training, invariant feature learning, and evaluation under corrupted visual inputs. | Degradation/adverse tracking | Degradation/adverse-condition tracking | Zhong et al. 2024; Wu et al. 2024; local InvTrack | `zhong2024llot`; `wu2024mambanut`; `invtrack_local` | arXiv:2408.11463; arXiv:2412.00626; local InvTrack PDF/paper card |
-| P6 | State-space and Mamba-based modules have been adopted in vision because they can model structured dependencies without relying solely on quadratic attention. | State-space/vision foundation | State-space and Mamba foundations; visual Mamba/state-space models | Gu and Dao 2024; Zhu et al. 2024; Liu et al. 2024 | `gu2024mamba`; `zhu2024visionmamba`; `liu2024vmamba` | arXiv:2312.00752; arXiv:2401.09417; arXiv:2401.10166 |
-| P7 | In tracking, recent Mamba-based methods have been reported for roles such as temporal modeling, multimodal fusion, motion reasoning, template update, or efficient feature processing. | Technical positioning | Mamba-based tracking | Li et al. 2024; Huang et al. 2024; Xiao et al. 2024; Wang et al. 2024; Wu et al. 2024 | `li2024mambalct`; `huang2024mambafetrack`; `xiao2024mambatrack`; `wang2024mambaevt`; `wu2024mambanut` | arXiv records plus local paper cards |
+| Section | Main supported claim | Selected citation keys | Verification source |
+|---|---|---|---|
+| Transformer and One-Stream Visual Tracking | Transformer and one-stream trackers model template-search interaction, while recent trackers explore sequence generation, robust object modeling, prompting, temporal token propagation, parameter-efficient adaptation, and autoregressive queries. | `chen2021transt`; `yan2021stark`; `cui2022mixformer`; `ye2022ostrack`; `chen2023seqtrack`; `cai2023romtrack`; `cai2024hiptrack`; `zheng2024odtrack`; `lin2024lorat`; `xie2024aqatrack` | CVF pages for SeqTrack/ROMTrack/HIPTrack; arXiv records for ODTrack/LoRAT/AQATrack; existing bibliography for TransT/STARK/MixFormer/OSTrack |
+| Temporal Modeling and Target Adaptation | Recent tracking methods use tracking history, temporal tokens, autoregressive decoding, or spatio-temporal queries; this differs from restoration-guided search-feature adaptation. | `yan2021stark`; `cai2024hiptrack`; `zheng2024odtrack`; `chen2023seqtrack`; `xie2024aqatrack` | CVF/arXiv records listed in the audit CSV |
+| State-Space Models for Visual Representation | Mamba, Vision Mamba, and VMamba establish state-space visual representation foundations; MambaIR and MambaIRv2 establish restoration-oriented state-space processing but not tracking localization. | `gu2024mamba`; `zhu2024visionmamba`; `liu2024vmamba`; `guo2024mambair`; `guo2025mambairv2` | arXiv/CVF records; CVF confirmed MambaIRv2 pages 28124--28133 |
+| Mamba-Based Visual Tracking | Mamba trackers already use state-space modules for long-term context, RGB-event fusion, event-only dynamic template generation, and nighttime UAV tracking. | `li2024mambalct`; `huang2024mambafetrack`; `wang2025mambafetrackv2`; `wang2024mambaevt`; `wu2024mambanut` | arXiv records and local paper-card evidence; final venue unresolved for several entries |
+| Tracking Under Degraded Observations and Present-Work Positioning | Low-light tracking and degradation-invariant tracking already exist, so the proposed method is positioned narrowly as feature-level restoration-guided state-space adaptation inside OSTrack. | `zhong2024llot`; `wu2024mambanut`; `invtrack_local` | arXiv LLOT/MambaNUT records; local InvTrack evidence |
 
 ## New Bibliography Entries
 
-- `chen2021transt`: Transformer Tracking.
-- `yan2021stark`: Learning Spatio-Temporal Transformer for Visual Tracking.
-- `cui2022mixformer`: MixFormer: End-to-End Tracking with Iterative Mixed Attention.
-- `gu2024mamba`: Mamba: Linear-Time Sequence Modeling with Selective State Spaces.
-- `zhu2024visionmamba`: Vision Mamba: Efficient Visual Representation Learning with Bidirectional State Space Model.
-- `liu2024vmamba`: VMamba: Visual State Space Model.
-- `li2024mambalct`: MambaLCT: Boosting Tracking via Long-term Context State Space Model.
-- `huang2024mambafetrack`: Mamba-FETrack: Frame-Event Tracking via State Space Model.
-- `xiao2024mambatrack`: MambaTrack: A Simple Baseline for Multiple Object Tracking with State Space Model.
-- `wang2024mambaevt`: MambaEVT: Event Stream based Visual Object Tracking using State Space Model.
-- `wu2024mambanut`: MambaNUT: Nighttime UAV Tracking via Mamba and Adaptive Curriculum Learning.
-- `zhong2024llot`: Low-Light Object Tracking: A Benchmark.
+- `chen2023seqtrack`: SeqTrack: Sequence to Sequence Learning for Visual Object Tracking.
+- `cai2023romtrack`: Robust Object Modeling for Visual Tracking.
+- `cai2024hiptrack`: HIPTrack: Visual Tracking with Historical Prompts.
+- `zheng2024odtrack`: ODTrack: Online Dense Temporal Token Learning for Visual Tracking.
+- `lin2024lorat`: Tracking Meets LoRA: Faster Training, Larger Model, Stronger Performance.
+- `xie2024aqatrack`: Autoregressive Queries for Adaptive Tracking with Spatio-Temporal Transformers.
+- `wang2025mambafetrackv2`: Mamba-FETrack V2: Revisiting State Space Model for Frame-Event Based Visual Object Tracking.
+
+## Updated Bibliography Entries
+
+- `guo2024mambair`: added arXiv identifier and archive metadata; final page metadata remains unresolved.
+- `guo2025mambairv2`: updated to CVPR 2025 proceedings format with verified pages 28124--28133 and arXiv identifier.
+- `wang2024mambaevt`: normalized title capitalization to the paper title.
+- `wu2024mambanut`: updated title to the revised arXiv title.
 
 ## Remaining Human-Review Items
 
-- Several new entries are arXiv/preprint records because DOI or final page metadata was not confirmed locally.
 - `invtrack_local` remains local unpublished evidence until final publication metadata is confirmed.
-- The manuscript still avoids state-of-the-art, universal robustness, and uniform-improvement claims.
+- `liu2024vmamba`, `li2024mambalct`, `huang2024mambafetrack`, `wang2024mambaevt`, `wu2024mambanut`, `zhong2024llot`, `zheng2024odtrack`, `xie2024aqatrack`, and `wang2025mambafetrackv2` remain arXiv-only in the bibliography because no final publication metadata was independently confirmed during this audit.
+- Local paper cards list final venues for some Mamba tracking papers, but the audit uses independently verified metadata in `experiments/related_work_recent_literature_audit.csv`.
