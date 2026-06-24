@@ -1,0 +1,8 @@
+comparison,paper_count,pair_count,mean_similarity,min_similarity,max_similarity,interpretation
+within Group A,10,45,0.4051,0.0500,0.7788,weakly consistent
+within Group B,3,3,0.5598,0.4399,0.7727,weakly consistent
+within Group C,4,6,0.4250,0.3294,0.5821,weakly consistent
+within Group D,7,21,0.4949,0.3415,0.7887,weakly consistent
+Group A versus Group B,,30,0.4666,0.1000,0.6750,weakly consistent
+Group A/B versus Group C,,52,0.4242,0.0818,0.6325,weakly consistent
+core groups versus Group D,,91,0.3766,0.1678,0.6034,weakly consistent
